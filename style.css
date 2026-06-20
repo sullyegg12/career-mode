@@ -518,12 +518,31 @@ input[type="range"]::-moz-range-thumb {
    --------------------------------------------------------------------- */
 .tableScroll { overflow-x: auto; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
 .statsTable { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
-.statsTable th { text-align: right; color: var(--text-faint); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: .03em; padding: 9px 10px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-surface-raised); position: sticky; top: 0; }
-.statsTable th:first-child, .statsTable td:first-child { text-align: left; position: sticky; left: 0; background: var(--bg-surface-raised); }
-.statsTable td { text-align: right; padding: 9px 10px; font-family: var(--font-mono); border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary); }
+.statsTable th {
+    position: static;
+    text-align: right;
+    color: var(--text-faint);
+    font-weight: 600;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-surface-raised);
+    top: 0; }
+.statsTable th:first-child, .statsTable td:first-child {
+    position: static;
+    text-align: left; left: 0; background: var(--bg-surface-raised); }
+.statsTable td {
+    position: static;
+    text-align: right;
+    padding: 9px 10px;
+    font-family: var(--font-mono); border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary); }
 .statsTable td.statsTable__label, .statsTable__label { text-align: left; font-family: var(--font-body); color: var(--text-primary); font-weight: 500; }
 .statsTable th.statsTable__headline, .statsTable td.statsTable__headline { color: var(--gold); font-weight: 700; background: var(--gold-soft); }
-.statsTable tbody tr:last-child td { border-bottom: none; }
+.statsTable tbody tr:last-child td {
+    position: static;
+    border-bottom: none; }
 .statsTable__current td { color: var(--text-primary); }
 .statsTable__current { background: var(--accent-soft); }
 .statsTable__totals td { font-weight: 700; color: var(--gold); background: var(--gold-soft); border-top: 1px solid var(--border-soft); }
