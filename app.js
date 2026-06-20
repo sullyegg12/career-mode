@@ -1087,11 +1087,11 @@ function runPlayoffs(league, sport, userTeamId) {
 function startNewProSeason(career) {
     let totalGames = 16; // Default fallback
 
-    switch(c.sport) {
-        case 'football': totalGames = 17; break; // Change 17 to your preferred length
-        case 'basketball': totalGames = 82; break; // Change 82 to your preferred length
-        case 'baseball': totalGames = 162; break; // Change 162 to your preferred length
-        case 'golf': totalGames = 20; break; // Change 20 to your preferred length
+    switch(career.sport) {
+        case 'football': totalGames = 17; break;
+        case 'basketball': totalGames = 82; break;
+        case 'baseball': totalGames = 162; break;
+        case 'golf': totalGames = 20; break;
     }
   const league = career.proLeague;
   const team = teamById(league, career.team);
