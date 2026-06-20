@@ -339,26 +339,37 @@ function hairPath(style, color) {
   }
 }
 function buildAvatarSVG(opts) {
-  const { skinTone, hairStyle, hairColor, jerseyColor, number, heightIn, weightLb } = opts;
-  const bmi = weightLb / (heightIn * heightIn) * 703;
-  const frameScale = clamp(0.86 + (bmi - 21) / 38, 0.84, 1.22).toFixed(3);
-  const numStr = (number === '' || number === null || number === undefined) ? '' : String(number);
-  return `<svg viewBox="0 0 208 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="player avatar">
-    <defs>
-      <clipPath id="frameClip"><rect x="0" y="0" width="208" height="220" rx="20"/></clipPath>
-    </defs>
-    <g clip-path="url(#frameClip)">
-      <rect width="208" height="220" fill="#171B21"/>
-      <g transform="translate(104 222) scale(${frameScale} 1) translate(-104 -222)">
-        <path d="M40 220c0-34 10-58 26-70 8 14 22 22 38 22s30-8 38-22c16 12 26 36 26 70z" fill="${jerseyColor}"/>
-        <path d="M40 220c0-34 10-58 26-70 3 5 6.5 9.5 10.5 13-10 16-16 36-16 57z" fill="#000" opacity=".12"/>
-        <text x="104" y="206" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-weight="700" font-size="30" fill="#fff" opacity=".92">${escapeHtmlSvg(numStr)}</text>
-        <rect x="92" y="98" width="24" height="34" rx="8" fill="${skinTone}"/>
-        <circle cx="104" cy="78" r="40" fill="${skinTone}"/>
-        ${hairPath(hairStyle, hairColor)}
-      </g>
-    </g>
-  </svg>`;
+    const { skinTone, hairStyle, hairColor, jerseyColor, number, heightIn, weightLb } = opts; // [cite: 575, 576]
+    const bmi = weightLb / (heightIn * heightIn) * 703; // [cite: 577]
+    const frameScale = clamp(0.86 + (bmi - 21) / 38, 0.84, 1.22).toFixed(3); // [cite: 578]
+    const numStr = (number === "" || number === null || number === undefined) ? '' : String(number); // [cite: 579]
+
+    return `
+    <svg viewBox="0 0 208 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="player avatar" class="avatar-canvas">
+        <defs>
+            <clipPath id="frameClip"><rect x="0" y="0" width="208" height="220" rx="20"/></clipPath>
+        </defs>
+        <g clip-path="url(#frameClip)">
+            <rect width="208" height="220" fill="#171B21"/>
+            
+            <g transform="translate(104 222) scale(${frameScale} 1) translate(-104 -222)">
+                <path d="M40 220c0-34 10-58 26-70 8 14 22 22 38 22s30-8 38-22c16 12 26 36 26 70z" fill="${jerseyColor}"/>
+                <path d="M40 220c0-34 10-58 26-70 3 5 6.5 9.5 10.5 13-10 16-16 36-16 57z" fill="#000" opacity=".12"/>
+                <text x="104" y="206" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-weight="700" font-size="30" fill="#fff" opacity=".92">${escapeHtmlSvg(numStr)}</text>
+                
+                <rect x="92" y="98" width="24" height="34" rx="8" fill="${skinTone}"/>
+                
+                <g class="avatar-layer-neck-shadow">
+                    <rect x="92" y="98" width="24" height="14" fill="#000000" opacity="0.2"/>
+                </g>
+                
+                <circle cx="104" cy="78" r="40" fill="${skinTone}"/>
+                
+                ${hairPath(hairStyle, hairColor)}
+            </g>
+        </g>
+    </svg>
+    `;
 }
 function escapeHtmlSvg(s) { return String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])); }
 
@@ -1074,6 +1085,14 @@ function runPlayoffs(league, sport, userTeamId) {
 }
 
 function startNewProSeason(career) {
+    let totalGames = 16; // Default fallback
+
+    switch(c.sport) {
+        case 'football': totalGames = 17; break; // Change 17 to your preferred length
+        case 'basketball': totalGames = 82; break; // Change 82 to your preferred length
+        case 'baseball': totalGames = 162; break; // Change 162 to your preferred length
+        case 'golf': totalGames = 20; break; // Change 20 to your preferred length
+    }
   const league = career.proLeague;
   const team = teamById(league, career.team);
   archiveSeason(career, 'pro', `${team.name} (Season ${career.season})`);
@@ -2068,13 +2087,27 @@ function renderStatsTab(career) {
     </tr>`;
   }
 
-  const table = `<div class="tableScroll"><table class="statsTable">
-    <thead><tr><th>Season</th>${fields.map(([, l]) => `<th>${l}</th>`).join('')}${derivedHeaders.map(l => `<th>${l}</th>`).join('')}</tr></thead>
+    const table = `<div class="statsTableWrapper"><table class="statsTable">
+    <thead>
+        <tr class="statsTable__head">
+            <th>Year/Team</th>
+            ${derivedColumns(sport, pos, careerTotals).map(([label]) => `<th>${escapeHtml(label)}</th>`).join('')}
+            ${fields.map(([, label]) => `<th>${escapeHtml(label)}</th>`).join('')}
+        </tr>
+    </thead>
     <tbody>
-      ${rows.map(tableRowHTML).join('')}
-      <tr class="statsTable__totals"><td>Career Totals</td>${fields.map(([k]) => `<td>${formatStatVal(k, careerTotals[k])}</td>`).join('')}${derivedColumns(sport, pos, careerTotals).map(([, v]) => `<td>${v}</td>`).join('')}</tr>
+        ${rows.map(rw => `<tr class="${rw.current ? 'statsTable__current' : ''}">
+            <td class="statsTable__label">${escapeHtml(rw.label)}</td>
+            ${derivedColumns(sport, pos, rw.totals).map(([, v]) => `<td>${v}</td>`).join('')}
+            ${fields.map(([k]) => `<td>${formatStatVal(k, rw.totals[k])}</td>`).join('')}
+        </tr>`).join('')}
+        <tr class="statsTable__totals">
+            <td>Career Totals</td>
+            ${derivedColumns(sport, pos, careerTotals).map(([, v]) => `<td>${v}</td>`).join('')}
+            ${fields.map(([k]) => `<td>${formatStatVal(k, careerTotals[k])}</td>`).join('')}
+        </tr>
     </tbody>
-  </table></div>`;
+</table></div>`;
 
   return `
     <section class="block">
