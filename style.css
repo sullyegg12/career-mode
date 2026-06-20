@@ -524,6 +524,47 @@ input[type="range"]::-moz-range-thumb {
 .statsTable__current { background: var(--accent-soft); }
 .statsTable__totals td { font-weight: 700; color: var(--gold); background: var(--gold-soft); border-top: 1px solid var(--border-soft); }
 .statsTable__totals td:first-child { background: var(--gold-soft); }
+/* Ensure the wrapper handles horizontal scrolling smoothly */
+.statsTableWrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 8px; /* Gives the scrollbar a little breathing room */
+}
+
+/* Force the table to stretch instead of squishing */
+.statsTable {
+    width: 100%;
+    min-width: max-content;
+    border-collapse: collapse;
+    font-size: 12.5px;
+}
+
+/* Prevent text from wrapping into multiple awkward lines */
+.statsTable th,
+.statsTable td {
+    padding: 9px 12px;
+    white-space: nowrap;
+}
+
+/* OPTIONAL UX UPGRADE: Sticky first column */
+/* This pins the "Year/Team" column to the left so you know what row you are looking at while scrolling */
+.statsTable th:first-child,
+.statsTable td:first-child {
+    position: sticky;
+    left: 0;
+    background: var(--bg-surface);
+    z-index: 2;
+    border-right: 1px solid var(--border-subtle);
+}
+
+/* Ensure the sticky backgrounds match their row highlights */
+.statsTable__current td:first-child {
+    background: var(--accent-soft);
+}
+.statsTable__totals td:first-child {
+    background: var(--gold-soft);
+}
 
 /* ---------------------------------------------------------------------
    15. MODAL
