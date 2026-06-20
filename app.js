@@ -138,7 +138,7 @@ const SPORT_META = {
   bowling:   { label: 'Bowling',    icon: '🎳', accent: '#3E8FE8', accentSoft: 'rgba(62,143,232,.16)',
                leagueName: 'Pro Bowling Circuit', leagueAbbr: 'PBC', draftLabel: null,
                proTermPlural: 'tour stops', unit: 'tournaments' },
-  golf:      { label: 'Golf',       icon: '⛳', accent: '#1F8A5F', accentSoft: 'rgba(31,138,95,.16)',
+  golf:      { label: 'Golf',       icon: '⛳', accent: '#1f8a5f', accentSoft: 'rgba(31,138,95,.16)',
                leagueName: 'Pro Golf Circuit', leagueAbbr: 'PGC', draftLabel: null,
                proTermPlural: 'tour stops', unit: 'tournaments' },
 };
@@ -1985,27 +1985,56 @@ function renderTourTab(career) {
    ---------------------------------------------------------------------- */
 function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
 function derivedColumns(sport, pos, totals) {
-  if (sport === 'basketball') {
-    const gp = totals.gp || 0;
-    return gp ? [['PPG', (totals.pts / gp).toFixed(1)], ['RPG', (totals.reb / gp).toFixed(1)], ['APG', (totals.ast / gp).toFixed(1)], ['FG%', (totals.fga ? (totals.fgm / totals.fga * 100).toFixed(1) : '0.0') + '%']] : [];
-  }
-  if (sport === 'baseball') {
-    if (statGroupFor('baseball', pos) === 'pitcher') {
-      const ip = totals.ip || 0;
-      return [['ERA', ip ? (totals.er * 9 / ip).toFixed(2) : '0.00'], ['WHIP', ip ? ((totals.bb + totals.h) / ip).toFixed(2) : '0.00']];
+    if (sport === 'basketball') {
+        // Prevent division by zero
+        const g = totals.gp || 1;
+        return [
+            ['PPG', (totals.pts / g).toFixed(1)],
+            ['RPG', (totals.reb / g).toFixed(1)],
+            ['APG', (totals.ast / g).toFixed(1)],
+            ['SPG', (totals.stl / g).toFixed(1)],
+            ['BPG', (totals.blk / g).toFixed(1)]
+        ];
     }
-    const ab = totals.ab || 0;
-    return [['AVG', ab ? (totals.h / ab).toFixed(3).replace(/^0/, '') : '.000']];
-  }
-  if (sport === 'bowling') {
-    const g = totals.games || 0;
-    return [['AVG', g ? (totals.pinfall / g).toFixed(1) : '0.0']];
-  }
-  if (sport === 'golf') {
-    const rds = totals.roundsPlayed || 0;
-    return [['SCORING AVG', rds ? (totals.strokesTotal / rds).toFixed(2) : '0.00']];
-  }
-  return [];
+
+    if (sport === 'baseball') {
+        if (['SP', 'RP'].includes(pos)) {
+            // Pitcher Stats
+            const ip = totals.ip || 0;
+            const er = totals.er || 0;
+            const bb = totals.bb || 0;
+            const h = totals.h || 0;
+
+            const era = ip > 0 ? ((er / ip) * 9).toFixed(2) : '0.00';
+            const whip = ip > 0 ? ((bb + h) / ip).toFixed(2) : '0.00';
+
+            return [
+                ['ERA', era],
+                ['WHIP', whip]
+            ];
+        } else {
+            // Hitter Stats
+            const ab = totals.ab || 0;
+            const h = totals.h || 0;
+            const bb = totals.bb || 0;
+
+            // Format to drop the leading zero (e.g., .300 instead of 0.300)
+            const avg = ab > 0 ? (h / ab).toFixed(3).replace(/^0/, '') : '.000';
+            const obp = (ab + bb) > 0 ? ((h + bb) / (ab + bb)).toFixed(3).replace(/^0/, '') : '.000';
+
+            return [
+                ['AVG', avg],
+                ['OBP', obp]
+            ];
+        }
+    }
+
+    if (sport === 'golf') {
+        const rds = totals.roundsPlayed || 0;
+        return [['SCORING AVG', rds ? (totals.strokesTotal / rds).toFixed(2) : '0.00']];
+    }
+
+    return [];
 }
 function formatStatVal(key, val) {
   if (key === 'earnings') return fmtMoney(val);
