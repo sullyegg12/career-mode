@@ -223,9 +223,28 @@ body.noScroll { overflow: hidden; }
 .careerCard__del { width: 30px; height: 30px; flex-shrink: 0; }
 .careerCard__del svg { width: 15px; height: 15px; }
 
-.miniAvatar { border-radius: 12px; overflow: hidden; flex-shrink: 0; background: var(--bg-surface-raised); }
-.miniAvatar svg { width: 100%; height: 100%; display: block; }
+/* Ensure the avatar containers can hold our new relative canvas */
+.avatarFrame,
+.miniAvatar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
 
+/* Force the single SVG grid to fill the frame completely */
+.avatarFrame svg.avatar-canvas,
+.miniAvatar svg.avatar-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+/* Fix the accidental beard color shift by applying proper blending to the neck shadow group */
+.avatar-canvas g.avatar-layer-neck-shadow {
+    mix-blend-mode: multiply;
+    opacity: 0.25;
+}
 .ovrPill {
   font-family: var(--font-mono); font-weight: 700; font-size: 12px;
   background: var(--gold-soft); color: var(--gold); padding: 3px 8px; border-radius: 7px;
@@ -513,17 +532,64 @@ input[type="range"]::-moz-range-thumb {
 /* ---------------------------------------------------------------------
    14. STATS TABLE
    --------------------------------------------------------------------- */
-.tableScroll { overflow-x: auto; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
-.statsTable { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
-.statsTable th { text-align: right; color: var(--text-faint); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: .03em; padding: 9px 10px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-surface-raised); position: sticky; top: 0; }
-.statsTable th:first-child, .statsTable td:first-child { text-align: left; position: sticky; left: 0; background: var(--bg-surface-raised); }
-.statsTable td { text-align: right; padding: 9px 10px; font-family: var(--font-mono); border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary); }
-.statsTable td.statsTable__label, .statsTable__label { text-align: left; font-family: var(--font-body); color: var(--text-primary); font-weight: 500; }
-.statsTable tbody tr:last-child td { border-bottom: none; }
-.statsTable__current td { color: var(--text-primary); }
-.statsTable__current { background: var(--accent-soft); }
-.statsTable__totals td { font-weight: 700; color: var(--gold); background: var(--gold-soft); border-top: 1px solid var(--border-soft); }
-.statsTable__totals td:first-child { background: var(--gold-soft); }
+.tableScroll {
+    overflow-x: auto; border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+}
+.statsTable {
+    width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap;
+}
+.statsTable th {
+    text-align: right;
+    color: var(--text-faint);
+    font-weight: 600;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-surface-raised);
+    position: sticky; top: 0;
+}
+.statsTable th:first-child, .statsTable td:first-child {
+    text-align: left;
+    position: sticky;
+    left: 0;
+    background: var(--bg-surface-raised);
+}
+.statsTable td {
+    text-align: right;
+    padding: 9px 10px;
+    font-family: var(--font-mono);
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+}
+.statsTable td.statsTable__label, .statsTable__label {
+    position: static;
+    text-align: left;
+    font-family: var(--font-body);
+    color: var(--text-primary);
+    font-weight: 500;
+}
+.statsTable tbody tr:last-child td {
+    border-bottom: none;
+}
+.statsTable__current td {
+    color: var(--text-primary);
+}
+.statsTable__current {
+    background: var(--accent-soft);
+}
+.statsTable__totals td {
+    font-weight: 700;
+    color: var(--gold);
+    background: var(--gold-soft);
+    border-top: 1px solid var(--border-soft);
+}
+.statsTable__totals td:first-child {
+    position: static;
+    left: 0;
+    background: var(--gold-soft);
+}
 /* Ensure the wrapper handles horizontal scrolling smoothly */
 .statsTableWrapper {
     width: 100%;
@@ -545,25 +611,6 @@ input[type="range"]::-moz-range-thumb {
 .statsTable td {
     padding: 9px 12px;
     white-space: nowrap;
-}
-
-/* OPTIONAL UX UPGRADE: Sticky first column */
-/* This pins the "Year/Team" column to the left so you know what row you are looking at while scrolling */
-.statsTable th:first-child,
-.statsTable td:first-child {
-    position: sticky;
-    left: 0;
-    background: var(--bg-surface);
-    z-index: 2;
-    border-right: 1px solid var(--border-subtle);
-}
-
-/* Ensure the sticky backgrounds match their row highlights */
-.statsTable__current td:first-child {
-    background: var(--accent-soft);
-}
-.statsTable__totals td:first-child {
-    background: var(--gold-soft);
 }
 
 /* ---------------------------------------------------------------------
