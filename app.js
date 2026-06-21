@@ -1576,16 +1576,23 @@ function parseRoute() {
     const h = location.hash.replace(/^#\/?/, '');
     return h.split('/').filter(Boolean).map(decodeURIComponent);
 }
+
 function router() {
     const parts = parseRoute();
     closeModal();
-    window.scrollTo(0, 0);
+
     if (parts.length === 0) return renderHome();
     if (parts[0] === 'sport' && parts[1] && parts[2] === 'new') return renderCreate(parts[1]);
     if (parts[0] === 'sport' && parts[1]) return renderSportList(parts[1]);
     if (parts[0] === 'career' && parts[1] && parts[2]) return renderCareerHub(parts[1], parts[2], parts[3] || 'overview');
     return renderHome();
 }
+
+// Only scroll on real route changes
+window.addEventListener('hashchange', () => {
+    window.scrollTo(0, 0);
+    router();
+});
 window.addEventListener('hashchange', router);
 
 function toast(msg, type) {
