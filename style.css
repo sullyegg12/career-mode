@@ -706,3 +706,6 @@ input[type="range"]::-moz-range-thumb {
     .field--narrow { flex: 1; }
     .offerGrid { grid-template-columns: 1fr; }
 }
+button, [data-action] {
+    touch-action: manipulation;
+}
