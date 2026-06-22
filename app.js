@@ -120,8 +120,6 @@ function randomCollegeName() {
 
 /* ----------------------------------------------------------------------
    2. SPORT CONFIGURATION
-   Each sport defines: label/icon, whether positions exist, position list,
-   6 attributes per position (uniform UI), league shape, physical baselines.
    ---------------------------------------------------------------------- */
 const SPORTS = ['football', 'basketball', 'baseball', 'bowling', 'golf'];
 
@@ -147,7 +145,6 @@ const HAS_POSITIONS = { football: true, basketball: true, baseball: true, bowlin
 const HAS_TRADES = { football: true, basketball: true, baseball: true, bowling: false, golf: false };
 const HAS_MINORS = { baseball: true };
 
-// position -> { label, group, attrs[6], heightIn, weightLb }  (height/weight = baseline for build calc)
 const POSITIONS = {
     football: {
         QB: { label: 'Quarterback', group: 'passer', attrs: ['Arm Power','Accuracy','Awareness','Speed','Agility','Strength'], h: 74, w: 220 },
@@ -187,7 +184,6 @@ function positionList(sport) { return Object.keys(POSITIONS[sport]); }
 function posInfo(sport, posKey) { return POSITIONS[sport][posKey] || POSITIONS[sport]['GEN']; }
 function roleAttrs(sport, posKey) { return posInfo(sport, posKey).attrs; }
 
-// Which attribute represents "power" and "speed" for build-bonus purposes
 const POWER_ATTR_HINTS = ['Power','Strength','Run Blocking','Post Scoring','Velocity','Hit Power','Kick Power','Driving Power'];
 const SPEED_ATTR_HINTS = ['Speed','Agility','Quickness','Athleticism'];
 function findHintAttr(attrs, hints) {
@@ -195,35 +191,22 @@ function findHintAttr(attrs, hints) {
     return null;
 }
 
-// League shape per sport: team count, conferences, divisions/conf, games per season, playoff structure.
-// directSeeds = teams per conference that make the playoff bracket automatically.
-// playInPool = next N seeds per conference that battle in a mini-bracket for ONE remaining bracket spot.
-// byeCount = how many of the bracket's top seeds get a first-round bye (bracket size = byeCount + playing teams).
 const LEAGUE_SHAPE = {
     football:  { teams: 32, conferences: 2, divisions: 4, games: 17, directSeeds: 7, playInPool: 0, byeCount: 1 },
     basketball: { teams: 30, conferences: 2, divisions: 3, games: 82, directSeeds: 6, playInPool: 4, byeCount: 0 },
     baseball:  { teams: 30, conferences: 2, divisions: 3, games: 162, directSeeds: 6, playInPool: 0, byeCount: 2 },
 };
-const MINORS_SHAPE = { teams: 10, gamesToCallUpEligible: 5 }; // baseball single-A pool, callup check starts after N games
+const MINORS_SHAPE = { teams: 10, gamesToCallUpEligible: 5 };
 
-// Skill points per game are scaled so a full SEASON of points stays roughly constant
-// regardless of how long that sport's season is. Reference pace = the original 14-game
-// (football/baseball) / 22-game (basketball) seasons this balance was tuned against.
 const SEASON_REFERENCE_GAMES = { football: 14, basketball: 22, baseball: 14 };
 
-// Age progression: what age a player is at each career milestone, regardless of the
-// flavor birthday entered at creation. Career age is tracked authoritatively on the
-// career object (career.age) once gameplay begins.
 const AGE_MILESTONES = {
     football:   { hsComplete: 18, collegeComplete: 21, proStart: 21 },
-    basketball: { hsComplete: 18, collegeComplete: 19, proStart: 19 }, // "one and done"
-    baseball:   { hsComplete: 18, collegeComplete: 20, proStart: 21 }, // minors at 20, majors call-up at 21
+    basketball: { hsComplete: 18, collegeComplete: 19, proStart: 19 },
+    baseball:   { hsComplete: 18, collegeComplete: 20, proStart: 21 },
     bowling:    { hsComplete: 18, collegeComplete: 21, proStart: 21 },
     golf:       { hsComplete: 18, collegeComplete: 21, proStart: 21 },
 };
-// Decline curve: attributes start eroding at `declineStart`, accelerating toward
-// `retireMin`-`retireMax` (a random age in that range is rolled per career), where
-// retirement becomes mandatory. Bowling/golf decline later and cap at 60.
 const RETIREMENT_RULES = {
     football:   { declineStart: 35, retireMin: 35, retireMax: 42 },
     basketball: { declineStart: 35, retireMin: 35, retireMax: 42 },
@@ -231,10 +214,9 @@ const RETIREMENT_RULES = {
     bowling:    { declineStart: 45, retireMin: 50, retireMax: 60 },
     golf:       { declineStart: 45, retireMin: 45, retireMax: 60 },
 };
-const MAX_DECLINE_PER_SEASON = 6; // attribute points lost per season at full decline progress
-const CONDITIONING_START = 58;    // baseline "Conditioning" longevity stat (not part of OVR)
+const MAX_DECLINE_PER_SEASON = 6;
+const CONDITIONING_START = 58;
 
-// Tour shape (bowling / golf)
 const TOUR_SHAPE = {
     bowling: { eventsPerSeason: 20, fieldSize: 70 },
     golf:    { eventsPerSeason: 42, fieldSize: 90 },
@@ -273,8 +255,6 @@ function saveState() {
         toast('Could not save — your browser storage may be full.', 'error');
     }
 }
-// Runs fn with saveState() calls suspended (so a loop of many simulated games doesn't
-// serialize/write the entire save file after every single one), then saves once at the end.
 function withSaveSuspended(fn) {
     _suspendSave = true;
     try { fn(); } finally { _suspendSave = false; saveState(); }
@@ -295,14 +275,12 @@ const ATTR_MIN = 25, ATTR_MAX = 99;
 function generateStartingAttributes(sport, posKey, heightIn, weightLb) {
     const attrs = roleAttrs(sport, posKey);
     const base = {};
-    // distribute values that average to START_OVERALL_TARGET
     let raw = attrs.map(() => randInt(58, 68));
     const avg = raw.reduce((a, b) => a + b, 0) / raw.length;
     const diff = START_OVERALL_TARGET - avg;
     raw = raw.map(v => clamp(Math.round(v + diff), 45, 75));
     attrs.forEach((a, i) => base[a] = raw[i]);
 
-    // build bonus from height/weight relative to position baseline
     const info = posInfo(sport, posKey);
     const heightDelta = (heightIn - info.h) / info.h;
     const weightDelta = (weightLb - info.w) / info.w;
@@ -328,7 +306,7 @@ function isInDecline(career) {
     return rules && career.age >= rules.declineStart;
 }
 function canUpgrade(career, attrName) {
-    if (isInDecline(career)) return false; // past your prime — points can no longer grow raw skill attributes
+    if (isInDecline(career)) return false;
     const val = career.attributes[attrName];
     if (val >= ATTR_MAX) return false;
     return career.skillPoints >= upgradeCost(val);
@@ -353,16 +331,12 @@ function upgradeConditioning(career) {
     return true;
 }
 function performanceScore(career) {
-    // 0-100 "how well did they play" — driven by overall + randomness (regression to the mean for unproven players)
     const base = career.overall;
-    const noise = (rngNormal01() - 0.5) * 60; // +/-30ish
+    const noise = (rngNormal01() - 0.5) * 60;
     const badgeBonus = totalBadgeBonus(career);
     return clamp(Math.round(base * 0.6 + 40 * rngNormal01() * 0.6 + noise * 0.5 + base * 0.1 + badgeBonus), 5, 100);
 }
 
-/* ---- Badges: a small, deliberately short list of endgame perks per sport.
-   Unlocked with skill points once overall is high — the spending sink once
-   every attribute is at (or near) 99. Each gives a flat nudge to performance. ---- */
 const BADGES = {
     football: [
         { id: 'clutch_gene', name: 'Clutch Gene', desc: 'Elevates under pressure — steadier performance every game.', cost: 50, minOverall: 80, perfBonus: 3 },
@@ -424,9 +398,6 @@ function skillPointsEarned(stage, perf, sport) {
     const stageBase = { highschool: 1, college: 1, minors: 1, pro: 2, tour: 2 }[stage] ?? 1;
     const bonusMax = { highschool: 1, college: 1, minors: 1, pro: 2, tour: 2 }[stage] ?? 1;
     let pts = stageBase + Math.round((perf / 100) * bonusMax);
-    // Pro team-sport seasons are now wildly different lengths (17/82/162 games) — scale
-    // per-game points so a full SEASON nets roughly what it did at the original pace
-    // (14 games for football/baseball, 22 for basketball).
     if (stage === 'pro' && sport && SEASON_REFERENCE_GAMES[sport] && LEAGUE_SHAPE[sport]) {
         const scale = SEASON_REFERENCE_GAMES[sport] / LEAGUE_SHAPE[sport].games;
         pts = Math.max(1, Math.round(pts * scale));
@@ -435,39 +406,111 @@ function skillPointsEarned(stage, perf, sport) {
 }
 
 /* ----------------------------------------------------------------------
-   5. AVATAR (stylized SVG bust — fully generated, no external assets)
+   5. AVATAR — hair images + SVG bust
    ---------------------------------------------------------------------- */
-const SKIN_TONES = ['#3A2618', '#5C3A21', '#8A5A36', '#C68B59', '#E0AC76', '#F2D2A9'];
-const HAIR_COLORS = ['#0B0B0B', '#2C1B10', '#5A3825', '#8C6239', '#C9A05C', '#E8E0D0', '#B23A3A', '#3E6FB0'];
-const HAIR_STYLES = ['bald', 'buzz', 'short', 'medium', 'curly', 'long', 'mohawk', 'braids'];
 
-function hairPath(style, color) {
-    switch (style) {
-        case 'bald': return '';
-        case 'buzz': return `<path d="M104 42a40 40 0 0 1 40 40v3h-80v-3a40 40 0 0 1 40-40z" fill="${color}" opacity=".88"/>`;
-        case 'short': return `<path d="M104 38a44 44 0 0 1 44 44v16h-13v-12a5 5 0 0 0-5-5h-52a5 5 0 0 0-5 5v12H60V82a44 44 0 0 1 44-44z" fill="${color}"/>`;
-        case 'medium': return `<path d="M104 34a48 48 0 0 1 48 48v28h-14v-22a6 6 0 0 0-6-6h-2v26h-14V90H92v18H78V82h-2a6 6 0 0 0-6 6v22H56V82a48 48 0 0 1 48-48z" fill="${color}"/>`;
-        case 'curly': return `<g fill="${color}">
-        <circle cx="72" cy="64" r="15"/><circle cx="90" cy="48" r="17"/><circle cx="112" cy="44" r="18"/>
-        <circle cx="134" cy="50" r="16"/><circle cx="148" cy="68" r="14"/><circle cx="104" cy="58" r="20"/>
-      </g>`;
-        case 'long': return `<path d="M104 34a48 48 0 0 1 48 48v52h-15v-38c0-7-5-12-11-12h-2v50h-14V90H98v44H84V90h-2c-6 0-11 5-11 12v38H56V82a48 48 0 0 1 48-48z" fill="${color}"/>`;
-        case 'mohawk': return `<path d="M104 32c7 0 12 7 12 18v44c0 7-5 12-12 12s-12-5-12-12V50c0-11 5-18 12-18z" fill="${color}"/>
-        <path d="M64 92a40 40 0 0 1 13-32c-4 9-6 20-6 32v10h-7z" fill="${color}" opacity=".5"/>
-        <path d="M144 92a40 40 0 0 0-13-32c4 9 6 20 6 32v10h7z" fill="${color}" opacity=".5"/>`;
-        case 'braids': return `<g fill="${color}">
-        <path d="M104 38a44 44 0 0 1 44 44v6H60v-6a44 44 0 0 1 44-44z"/>
-        <rect x="58" y="84" width="10" height="50" rx="5"/><rect x="74" y="88" width="10" height="54" rx="5"/>
-        <rect x="140" y="84" width="10" height="50" rx="5"/><rect x="124" y="88" width="10" height="54" rx="5"/>
-      </g>`;
-        default: return '';
-    }
+/* ---- Skin tones (unchanged) ---- */
+const SKIN_TONES = ['#3A2618', '#5C3A21', '#8A5A36', '#C68B59', '#E0AC76', '#F2D2A9'];
+
+/* ---- Hair colors: named objects so filenames match exactly ----
+   Each entry has:
+     name  — matches the color suffix in your filenames (Black, Brown, etc.)
+     hex   — used to tint the swatch picker button
+   Your files: Buzz-Black, Short-Brown, Long-Curly-Light-Brown, etc.
+   ---------------------------------------------------------------- */
+const HAIR_COLORS = [
+    { name: 'Black',       hex: '#0B0B0B' },
+    { name: 'Brown',       hex: '#2C1B10' },
+    { name: 'Light-Brown', hex: '#8C6239' },
+    { name: 'Blonde',      hex: '#C9A05C' },
+    { name: 'Ginger',      hex: '#B23A3A' },
+];
+
+/* ---- Hair styles: keys match the style prefix in your filenames ----
+   Your files use: Buzz, Short, Long-Curly, Curly, Long-Straight, Long-Wavy
+   'bald' has no image — we just render nothing.
+   -------------------------------------------------------------------- */
+const HAIR_STYLES = [
+    'bald',
+    'Buzz',
+    'Short',
+    'Curly',
+    'Long-Curly',
+    'Long-Straight',
+    'Long-Wavy',
+];
+
+/* Returns a display label for the style chip buttons */
+function hairStyleLabel(style) {
+    const labels = {
+        'bald':         'Bald',
+        'Buzz':         'Buzz',
+        'Short':        'Short',
+        'Curly':        'Curly',
+        'Long-Curly':   'Long Curly',
+        'Long-Straight':'Long Straight',
+        'Long-Wavy':    'Long Wavy',
+    };
+    return labels[style] || style;
 }
+
+/* Builds the <image> tag that places your PNG inside the SVG.
+   Files live in the project root alongside index.html, e.g. Short-Black.png
+
+   The SVG viewBox is 208×220. The image fills the whole frame so your PNGs
+   (transparent background, head centred) line up with the face circle below.
+   Tweak x/y/width/height here if any style needs repositioning. */
+function hairImageTag(style, colorName) {
+    if (!style || style === 'bald') return '';
+
+    /* colorName may arrive as a plain string (legacy saves) or already correct.
+       Map any old hex values that might be stored to the closest named color. */
+    const resolvedColor = resolveHairColorName(colorName);
+
+    const filename = `${style}-${resolvedColor}`;
+    /* Path is just the filename — images sit in the same folder as index.html */
+    return `<image href="${filename}.png"
+        x="0" y="0" width="208" height="220"
+        preserveAspectRatio="xMidYMid meet"
+        style="pointer-events:none"/>`;
+}
+
+/* Resolves a stored color value to a valid color name.
+   Handles: { name, hex } objects, plain name strings, and legacy hex strings. */
+function resolveHairColorName(colorVal) {
+    if (!colorVal) return 'Black';
+    // Already an object with a name property
+    if (typeof colorVal === 'object' && colorVal.name) return colorVal.name;
+    // Plain string that matches a known name
+    const byName = HAIR_COLORS.find(c => c.name === colorVal);
+    if (byName) return byName.name;
+    // Legacy: stored as hex — map to closest named color
+    const byHex = HAIR_COLORS.find(c => c.hex === colorVal);
+    if (byHex) return byHex.name;
+    // Fallback
+    return 'Black';
+}
+
+/* Returns the hex for swatch rendering from whatever format colorVal is in */
+function resolveHairColorHex(colorVal) {
+    if (!colorVal) return HAIR_COLORS[0].hex;
+    if (typeof colorVal === 'object' && colorVal.hex) return colorVal.hex;
+    const byName = HAIR_COLORS.find(c => c.name === colorVal);
+    if (byName) return byName.hex;
+    const byHex = HAIR_COLORS.find(c => c.hex === colorVal);
+    if (byHex) return byHex.hex;
+    return colorVal; // pass through if already a hex
+}
+
 function buildAvatarSVG(opts) {
     const { skinTone, hairStyle, hairColor, jerseyColor, number, heightIn, weightLb } = opts;
     const bmi = weightLb / (heightIn * heightIn) * 703;
     const frameScale = clamp(0.86 + (bmi - 21) / 38, 0.84, 1.22).toFixed(3);
     const numStr = (number === '' || number === null || number === undefined) ? '' : String(number);
+
+    /* Resolve the color name for the image filename */
+    const colorName = resolveHairColorName(hairColor);
+
     return `<svg viewBox="0 0 208 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="player avatar">
     <defs>
       <clipPath id="frameClip"><rect x="0" y="0" width="208" height="220" rx="20"/></clipPath>
@@ -475,15 +518,20 @@ function buildAvatarSVG(opts) {
     <g clip-path="url(#frameClip)">
       <rect width="208" height="220" fill="#171B21"/>
       <g transform="translate(104 222) scale(${frameScale} 1) translate(-104 -222)">
+        <!-- Jersey / body -->
         <path d="M34 220C34 182 43 152 61 130C68 124 86 118 104 118C122 118 140 124 147 130C165 152 174 182 174 220Z" fill="${jerseyColor}"/>
         <path d="M34 220C34 182 43 152 61 130C63 127 65 123 66 121C55 150 45 184 34 220Z" fill="#000" opacity=".13"/>
+        <!-- Jersey number -->
         <text x="104" y="204" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-weight="700" font-size="28" fill="#fff" opacity=".92">${escapeHtmlSvg(numStr)}</text>
+        <!-- Face -->
         <circle cx="104" cy="82" r="40" fill="${skinTone}"/>
-        ${hairPath(hairStyle, hairColor)}
+        <!-- Hair image (drawn on top of face so it covers the top of the head) -->
+        ${hairImageTag(hairStyle, colorName)}
       </g>
     </g>
   </svg>`;
 }
+
 function escapeHtmlSvg(s) { return String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])); }
 
 /* ----------------------------------------------------------------------
@@ -647,7 +695,6 @@ function formatIP(n) {
     return `${whole}.${outs}`;
 }
 
-/* ---- Bowling / Golf single-event simulation ---- */
 function simulateBowlingEvent(career) {
     const p = performanceScore(career) / 100;
     const games = 6;
@@ -664,7 +711,7 @@ function simulateGolfEvent(career) {
     const roundScore = () => clamp(Math.round(par - p * 7 + randFloat(-4.5, 4.5)), 62, 88);
     const r1 = roundScore(), r2 = roundScore();
     const throughTwo = r1 + r2;
-    const cutLine = par * 2 + 4; // +4 typical cut
+    const cutLine = par * 2 + 4;
     const madeCut = throughTwo <= cutLine || Math.random() < clamp(p - 0.3, 0, 0.9);
     let rounds = [r1, r2];
     if (madeCut) { rounds.push(roundScore()); rounds.push(roundScore()); }
@@ -674,7 +721,7 @@ function simulateGolfEvent(career) {
 }
 
 /* ----------------------------------------------------------------------
-   8. TEAM LEAGUE ENGINE (football / basketball / baseball pro leagues)
+   8. TEAM LEAGUE ENGINE
    ---------------------------------------------------------------------- */
 function generateLeague(sport) {
     const shape = LEAGUE_SHAPE[sport];
@@ -690,21 +737,18 @@ function generateLeague(sport) {
             division: DIVISION_NAMES[divIdx],
             rating: randInt(68, 92),
             wins: 0, losses: 0, ties: 0,
-            pf: 0, pa: 0, // points/runs for & against
+            pf: 0, pa: 0,
             streak: 0,
         };
     });
     const schedule = buildSeasonSchedule(teams.map(t => t.id), shape.games);
     return { sport, teams, schedule, week: 0, season: 1, complete: false, playoffResult: null };
 }
-// Builds `totalGames` weeks, each week pairing every team with one opponent (shuffled,
-// avoiding an immediate rematch from the prior week where possible). Works for any team
-// count / game count combination, unlike a strict round robin.
 function buildSeasonSchedule(teamIds, totalGames) {
     const lastOpponent = {};
     const allWeeks = [];
     for (let w = 0; w < totalGames; w++) {
-        const pool = pickN(teamIds, teamIds.length); // shuffled copy
+        const pool = pickN(teamIds, teamIds.length);
         const used = new Set();
         const matchups = [];
         for (let i = 0; i < pool.length; i++) {
@@ -736,7 +780,6 @@ function homeFieldEdge() { return 2.2; }
 function winProbability(ratingA, ratingB) {
     return 1 / (1 + Math.pow(10, -(ratingA - ratingB) / 14));
 }
-// Generate a plausible final score for the sport given winner/loser & rating gap
 function generateScore(sport, winnerRating, loserRating) {
     const gap = clamp((winnerRating - loserRating) / 4, 0, 10);
     if (sport === 'football') {
@@ -749,7 +792,6 @@ function generateScore(sport, winnerRating, loserRating) {
         const winnerScore = clamp(loserScore + r(2, 14) + Math.round(gap * 0.8), loserScore + 1, 134);
         return { winnerScore, loserScore };
     }
-    // baseball
     const loserScore = clamp(r(0, 4), 0, 9);
     const winnerScore = clamp(loserScore + r(1, 5) + (gap > 4 ? 1 : 0), loserScore + 1, 13);
     return { winnerScore, loserScore };
@@ -790,8 +832,6 @@ function playoffPicture(league) {
 }
 function groupBy(arr, key) { const o = {}; arr.forEach(x => (o[x[key]] = o[x[key]] || []).push(x)); return o; }
 
-// Simulate the next unplayed week: simulates ALL matchups (so the league feels alive),
-// returns the user's own game result (if any) for narrative display.
 function simulateLeagueWeek(league, sport, userTeamId, userCareer) {
     if (league.week >= league.schedule.length) return null;
     const weekObj = league.schedule[league.week];
@@ -803,7 +843,7 @@ function simulateLeagueWeek(league, sport, userTeamId, userCareer) {
         let perf = null;
         if (involvesUser) {
             perf = performanceScore(userCareer);
-            const boost = (perf - 60) / 6; // user's individual performance nudges team rating that game
+            const boost = (perf - 60) / 6;
             if (m.home === userTeamId) homeRating += boost; else awayRating += boost;
         }
         const pHome = winProbability(homeRating + homeFieldEdge(), awayRating);
@@ -831,7 +871,7 @@ function simulateLeagueWeek(league, sport, userTeamId, userCareer) {
 }
 
 /* ----------------------------------------------------------------------
-   9. TOUR ENGINE (bowling / golf — individual tournament circuits)
+   9. TOUR ENGINE (bowling / golf)
    ---------------------------------------------------------------------- */
 function generateRivals(sport) {
     const shape = TOUR_SHAPE[sport];
@@ -871,7 +911,6 @@ function purseForRank(rank, fieldSize, sport) {
 }
 function pointsForRank(rank) { return clamp(Math.round(150 - rank * 1.6), 1, 150); }
 
-// Simulate one tour event for the user; ranks them against a simulated field.
 function simulateTourEvent(career) {
     const sport = career.sport;
     const shape = TOUR_SHAPE[sport];
@@ -889,7 +928,7 @@ function simulateTourEvent(career) {
         });
     } else {
         const res = simulateGolfEvent(career);
-        userScoreMetric = -res.relToPar; // higher is better
+        userScoreMetric = -res.relToPar;
         userLine = res; madeCut = res.madeCut;
         field.forEach(f => {
             const par = 72;
@@ -900,11 +939,8 @@ function simulateTourEvent(career) {
     }
     field.push({ name: career.name, metric: userScoreMetric, isUser: true });
     field.sort((a, b) => b.metric - a.metric);
-    // award season points to every rival in the field based on this event's finish, so
-    // tour standings reflect real accumulated results rather than a static estimate
     field.forEach((f, i) => { if (!f.isUser) f.ref.seasonPoints = (f.ref.seasonPoints || 0) + pointsForRank(i + 1); });
     let place = field.findIndex(f => f.isUser) + 1;
-    // ties
     const tiedAtSameMetric = field.filter(f => f.metric === userScoreMetric).length > 1;
     const earnings = madeCut ? purseForRank(place, field.length, sport) : Math.round(purseForRank(field.length - 5, field.length, sport) * 0.3);
     const points = madeCut ? pointsForRank(place) : 1;
@@ -945,7 +981,7 @@ function createCareer(sport, form) {
 function logHistory(career, text) { career.history.unshift({ text, t: Date.now() }); career.history = career.history.slice(0, 60); }
 function logGame(career, entry) { career.gameLog.unshift(entry); career.gameLog = career.gameLog.slice(0, 80); }
 function awardPoints(career, stage, perf, sport) {
-    if (isFullyMaxed(career)) return 0; // nothing left to spend points on
+    if (isFullyMaxed(career)) return 0;
     const pts = skillPointsEarned(stage, perf, sport);
     career.skillPoints += pts;
     return pts;
@@ -1059,7 +1095,6 @@ function rollRetirementAge(sport) {
     return randInt(rules.retireMin, rules.retireMax);
 }
 
-/* ---- Draft (football / basketball) ---- */
 function runDraft(career) {
     const ov = career.overall;
     let round;
@@ -1088,7 +1123,6 @@ function runDraft(career) {
     return career.draft;
 }
 
-/* ---- Draft -> Minors -> Call-up (baseball) ---- */
 function runDraftBaseball(career) {
     const ov = career.overall;
     let round;
@@ -1147,7 +1181,6 @@ function callUpToMajors(career) {
     saveState();
 }
 
-/* ---- Turn pro (bowling / golf) ---- */
 function declareTurnPro(career) {
     archiveSeason(career, 'college', career.college.name);
     career.tour = { rivals: generateRivals(career.sport), schedule: generateTourSchedule(career.sport), eventIndex: 0 };
@@ -1195,8 +1228,6 @@ function simulateProGame(career) {
     return { entry, seasonOver, playoffResult };
 }
 
-// Plays a simple single-elimination round: pairs best-remaining vs worst-remaining.
-// Each entry needs {id, rating}. Returns winners array (same order semantics lost; caller re-seeds).
 function playBracketRound(seeded) {
     const winners = [];
     const n = seeded.length;
@@ -1207,15 +1238,12 @@ function playBracketRound(seeded) {
     }
     return winners;
 }
-// Runs one conference's bracket: optional play-in mini-tournament first (resolves the
-// last bracket spot), then bye-aware elimination rounds, reseeding by original seed each round.
 function runConferenceBracket(conf, teams, shape, userTeamId, roundLog) {
     const seeded = teams.map((t, i) => ({ id: t.id, name: t.name, rating: t.rating, seed: i + 1 }));
     let bracket = seeded.slice(0, shape.directSeeds);
 
     if (shape.playInPool) {
         const pool = seeded.slice(shape.directSeeds, shape.directSeeds + shape.playInPool);
-        // mini single-elim among the play-in pool (best vs worst, repeat) for ONE spot
         let remaining = pool.slice();
         while (remaining.length > 1) {
             const winners = playBracketRound(remaining);
@@ -1226,7 +1254,6 @@ function runConferenceBracket(conf, teams, shape, userTeamId, roundLog) {
         if (remaining[0]) bracket.push(remaining[0]);
     }
 
-    // Bye-aware elimination: top `byeCount` seeds sit out the first round.
     let byeTeams = bracket.slice(0, shape.byeCount);
     let playingTeams = bracket.slice(shape.byeCount);
     const roundNames = shape.byeCount > 0 ? ['Wild Card Round', 'Divisional Round', 'Conference Championship'] : ['Divisional Round', 'Conference Championship'];
@@ -1248,7 +1275,7 @@ function runConferenceBracket(conf, teams, shape, userTeamId, roundLog) {
         remaining = winners.sort((a, b) => a.seed - b.seed);
         roundIdx++;
     }
-    return remaining[0]; // conference champion {id, name, rating, seed}
+    return remaining[0];
 }
 
 function runPlayoffs(league, sport, userTeamId) {
@@ -1291,12 +1318,6 @@ function runPlayoffs(league, sport, userTeamId) {
 
 /* ----------------------------------------------------------------------
    12b. AWARDS ENGINE
-   Individual awards are computed by comparing the player's own real,
-   simulated season grade against a fictional per-team "best player" pool
-   (each opposing team already carries a hidden quality rating — we use it
-   to generate a plausible competing grade rather than simulating every
-   roster in the league). Good enough for awards/standings purposes without
-   requiring full league-wide individual play-by-play simulation.
    ---------------------------------------------------------------------- */
 function computeSeasonGrade(career) {
     if (!career.seasonPerfGames) return career.overall;
@@ -1329,7 +1350,6 @@ function isEligibleForAward(career, key) {
     if (key === 'dpoy' && sport === 'football') return isDefensePosition(sport, career.position);
     return true;
 }
-// Builds a ranked leaderboard for one award. Returns {entries:[{name,teamName,isUser,grade}], rank, total}
 function buildAwardLeaderboard(career, key) {
     const sport = career.sport;
     const league = career.proLeague;
@@ -1337,15 +1357,13 @@ function buildAwardLeaderboard(career, key) {
     const conferenceSplit = sport === 'baseball' && (key === 'mvp' || key === 'dpoy' || key === 'roty');
     let pool = league.teams.filter(t => t.id !== career.team);
     if (conferenceSplit) pool = pool.filter(t => t.conference === myTeam.conference);
-    else if (sport === 'baseball') pool = pool; // league-wide for mip/allstar
 
-    // user's comparison value for this award
     let userVal;
     if (key === 'mip') {
         const prior = career.priorSeasonGrade != null ? career.priorSeasonGrade : computeSeasonGrade(career);
-        userVal = 50 + (computeSeasonGrade(career) - prior); // normalize delta onto a 0-100ish scale
+        userVal = 50 + (computeSeasonGrade(career) - prior);
     } else if (key === 'opoy' && career.position === 'QB') {
-        userVal = computeSeasonGrade(career) * 0.65; // QBs rarely win OPOY — they're in the MVP conversation instead
+        userVal = computeSeasonGrade(career) * 0.65;
     } else {
         userVal = computeSeasonGrade(career);
     }
@@ -1355,10 +1373,9 @@ function buildAwardLeaderboard(career, key) {
 
     for (let i = 0; i < poolSize; i++) {
         let grade;
-        let t = pick(pool); // pick a random team for this fake player
+        let t = pick(pool);
         if (key === 'mip') grade = 50 + clamp(randInt(-8, 18), -30, 40);
-        else grade = clamp(t.rating + randInt(-25, 15), 35, 99); // Wider variance so you don't have 500 people at 99 OVR
-
+        else grade = clamp(t.rating + randInt(-25, 15), 35, 99);
         entries.push({ name: fictionalStarName(t), teamName: t.name, isUser: false, grade });
     }
     entries.push({ name: career.name, teamName: myTeam.name, isUser: true, grade: userVal });
@@ -1366,8 +1383,6 @@ function buildAwardLeaderboard(career, key) {
     const rank = entries.findIndex(e => e.isUser) + 1;
     return { entries, rank, total: entries.length };
 }
-// "Was I the best player on my own team" roll — used for Finals/Conference Finals MVP,
-// since we don't simulate full rosters for every team.
 function wasBestOnOwnTeam(career) {
     const team = teamById(career.proLeague, career.team);
     const chance = clamp((career.overall - team.rating + 50) / 100, 0.1, 0.92);
@@ -1398,7 +1413,6 @@ function finalizeSeasonAwards(career, playoffResult) {
         }
     });
 
-    // Finals MVP / Conference Finals MVP — only relevant if the team made a deep run
     if (playoffResult && playoffResult.madePlayoffs) {
         if (playoffResult.wonConference) {
             const bestOnTeam = wasBestOnOwnTeam(career);
@@ -1470,7 +1484,6 @@ function startNewProSeason(career) {
     saveState();
 }
 
-/* ---- Trade requests ---- */
 function requestTrade(career) {
     const cooldownGames = 4;
     if (career.seasonGameCount - career.trade.lastRequestGameCount < cooldownGames) {
@@ -1509,7 +1522,7 @@ function simulateTourEventForCareer(career) {
         eventsPlayed: 1,
         games: result.line.games || 0,
         pinfall: result.line.pinfall || 0,
-        highGame: 0, // handled via max below
+        highGame: 0,
         cutsMade: result.madeCut && career.sport === 'golf' ? 1 : 0,
         wins: result.place === 1 ? 1 : 0,
         top5: career.sport === 'bowling' && result.place <= 5 ? 1 : 0,
@@ -1588,7 +1601,6 @@ function router() {
     return renderHome();
 }
 
-// Only scroll on real route changes
 window.addEventListener('hashchange', () => {
     window.scrollTo(0, 0);
     router();
@@ -1619,7 +1631,6 @@ function closeModal() {
     document.body.classList.remove('noScroll');
 }
 
-/* Delegated click handling for the whole app */
 document.addEventListener('click', (e) => {
     const overlayClose = e.target.closest('[data-action="modal-close-overlay"]');
     if (overlayClose && e.target === overlayClose) { closeModal(); return; }
@@ -1721,8 +1732,13 @@ function positionLabel(career) {
 }
 function miniAvatar(career, size) {
     return `<div class="miniAvatar" style="width:${size}px;height:${size}px">${buildAvatarSVG({
-        skinTone: career.appearance.skinTone, hairStyle: career.appearance.hairStyle, hairColor: career.appearance.hairColor,
-        jerseyColor: SPORT_META[career.sport].accent, number: career.number, heightIn: career.heightIn, weightLb: career.weightLb,
+        skinTone: career.appearance.skinTone,
+        hairStyle: career.appearance.hairStyle,
+        hairColor: career.appearance.hairColor,
+        jerseyColor: SPORT_META[career.sport].accent,
+        number: career.number,
+        heightIn: career.heightIn,
+        weightLb: career.weightLb,
     })}</div>`;
 }
 
@@ -1814,7 +1830,8 @@ function defaultCreatorState(sport) {
         heightIn: baseline.h, weightLb: baseline.w,
         birthday: randomBirthday(16, 18, todayYear()),
         position: pos,
-        appearance: { skinTone: SKIN_TONES[2], hairStyle: 'short', hairColor: HAIR_COLORS[0] },
+        /* Default hair color stored as an object */
+        appearance: { skinTone: SKIN_TONES[2], hairStyle: HAIR_STYLES[1], hairColor: HAIR_COLORS[0] },
     };
 }
 function randomizeCreatorState(sport) {
@@ -1827,6 +1844,7 @@ function randomizeCreatorState(sport) {
         weightLb: clamp(baseline.w + randInt(-25, 25), 110, 360),
         birthday: randomBirthday(16, 18, todayYear()),
         position: pos,
+        /* Pick a random named color object */
         appearance: { skinTone: pick(SKIN_TONES), hairStyle: pick(HAIR_STYLES), hairColor: pick(HAIR_COLORS) },
     };
 }
@@ -1851,6 +1869,9 @@ function creatorFormHTML(sport) {
     const cs = creatorState;
     const age = ageFromBirthday(cs.birthday, todayYear());
 
+    /* Resolve active color for swatch highlighting */
+    const activeColorName = resolveHairColorName(cs.appearance.hairColor);
+
     const positionSection = HAS_POSITIONS[sport] ? `
     <section class="formSection">
       <h2 class="formSection__title">Position</h2>
@@ -1867,8 +1888,13 @@ function creatorFormHTML(sport) {
     <div class="creatorLayout">
       <div class="creatorPreview">
         <div class="avatarFrame" id="avatarPreview">${buildAvatarSVG({
-        skinTone: cs.appearance.skinTone, hairStyle: cs.appearance.hairStyle, hairColor: cs.appearance.hairColor,
-        jerseyColor: sm.accent, number: cs.number, heightIn: cs.heightIn, weightLb: cs.weightLb,
+        skinTone: cs.appearance.skinTone,
+        hairStyle: cs.appearance.hairStyle,
+        hairColor: cs.appearance.hairColor,
+        jerseyColor: sm.accent,
+        number: cs.number,
+        heightIn: cs.heightIn,
+        weightLb: cs.weightLb,
     })}</div>
         <button type="button" class="btn btn--ghost btn--block" data-action="creator-randomize" data-sport="${sport}">🎲 Randomize Everything</button>
       </div>
@@ -1935,13 +1961,19 @@ function creatorFormHTML(sport) {
           <div class="field">
             <span class="field__label">Hair Style</span>
             <div class="chipRow">
-              ${HAIR_STYLES.map(s => `<button type="button" class="chip ${cs.appearance.hairStyle === s ? 'chip--active' : ''}" data-action="creator-pick-hairstyle" data-style="${s}">${s}</button>`).join('')}
+              ${HAIR_STYLES.map(s => `<button type="button" class="chip ${cs.appearance.hairStyle === s ? 'chip--active' : ''}" data-action="creator-pick-hairstyle" data-style="${s}">${hairStyleLabel(s)}</button>`).join('')}
             </div>
           </div>
           <div class="field">
             <span class="field__label">Hair Color</span>
             <div class="swatchRow">
-              ${HAIR_COLORS.map(c => `<button type="button" class="swatch swatch--sm ${cs.appearance.hairColor === c ? 'swatch--active' : ''}" style="background:${c}" data-action="creator-pick-haircolor" data-color="${c}" aria-label="hair color"></button>`).join('')}
+              ${HAIR_COLORS.map(c => `<button type="button"
+                  class="swatch swatch--sm ${activeColorName === c.name ? 'swatch--active' : ''}"
+                  style="background:${c.hex}"
+                  data-action="creator-pick-haircolor"
+                  data-color-name="${c.name}"
+                  data-color-hex="${c.hex}"
+                  aria-label="${c.name} hair color"></button>`).join('')}
             </div>
           </div>
         </section>
@@ -1956,8 +1988,13 @@ function creatorFormHTML(sport) {
 function refreshAvatarPreview(sport) {
     const cs = creatorState;
     qs('avatarPreview').innerHTML = buildAvatarSVG({
-        skinTone: cs.appearance.skinTone, hairStyle: cs.appearance.hairStyle, hairColor: cs.appearance.hairColor,
-        jerseyColor: SPORT_META[sport].accent, number: cs.number, heightIn: cs.heightIn, weightLb: cs.weightLb,
+        skinTone: cs.appearance.skinTone,
+        hairStyle: cs.appearance.hairStyle,
+        hairColor: cs.appearance.hairColor,
+        jerseyColor: SPORT_META[sport].accent,
+        number: cs.number,
+        heightIn: cs.heightIn,
+        weightLb: cs.weightLb,
     });
 }
 
@@ -2260,8 +2297,8 @@ function renderBadgesSection(career) {
     const cards = list.map(b => {
         const has = owned.includes(b.id);
         const can = canUnlockBadge(career, b.id);
-        let stateLabel, btnHtml;
-        if (has) { stateLabel = 'Unlocked'; btnHtml = `<span class="badgeCard__owned">✓ Owned</span>`; }
+        let btnHtml;
+        if (has) { btnHtml = `<span class="badgeCard__owned">✓ Owned</span>`; }
         else {
             const reasonLocked = career.overall < b.minOverall ? `Requires ${b.minOverall} OVR` : `${b.cost} pts`;
             btnHtml = can
@@ -2277,7 +2314,7 @@ function renderBadgesSection(career) {
     return `
     <section class="block" style="margin-top:24px">
       <h2 class="block__title">Badges</h2>
-      <p class="formSection__hint">A short list of late-career perks. Each one gives a small, permanent edge to performance — unlocked with skill points once your overall is high enough. This is also where extra skill points go once everything else is maxed.</p>
+      <p class="formSection__hint">A short list of late-career perks. Each one gives a small, permanent edge to performance — unlocked with skill points once your overall is high enough.</p>
       <div class="badgeGrid">${cards}</div>
     </section>
   `;
@@ -2291,7 +2328,7 @@ function renderConditioningSection(career) {
     return `
     <section class="block" style="margin-top:24px">
       <h2 class="block__title">Body &amp; Longevity</h2>
-      <p class="formSection__hint">Conditioning doesn't raise your overall — it slows the decline that sets in around age ${rules.declineStart} and pushes back retirement decline. Skill points can't undo attribute regression directly, but a well-conditioned body fights it off.</p>
+      <p class="formSection__hint">Conditioning doesn't raise your overall — it slows the decline that sets in around age ${rules.declineStart} and pushes back retirement decline.</p>
       <div class="attrList">
         <div class="attrRow">
           <div class="attrRow__top">
@@ -2467,7 +2504,7 @@ function renderAwardsTab(career) {
     if (!career.proLeague || (career.stage !== 'pro' && career.stage !== 'retired')) {
         return `<div class="emptyState">
       <span class="emptyState__icon">🏆</span>
-      <p>Awards and award races show up here once you're in the pros. Win hardware, make All-Star teams, and chase Finals MVP.</p>
+      <p>Awards and award races show up here once you're in the pros.</p>
     </div>`;
     }
     const labels = awardLabels(career.sport);
@@ -2478,7 +2515,7 @@ function renderAwardsTab(career) {
 function renderLiveAwardRace(career, labels) {
     const keys = awardKeysForSport(career.sport).filter(k => isEligibleForAward(career, k));
     if (!keys.length) {
-        return `<section class="block"><h2 class="block__title">This Season's Race</h2><p class="emptyHint">No award races apply to you this season (e.g. rookies aren't eligible for Most Improved, and only first-year players are eligible for Rookie of the Year).</p></section>`;
+        return `<section class="block"><h2 class="block__title">This Season's Race</h2><p class="emptyHint">No award races apply to you this season.</p></section>`;
     }
     const cards = keys.map(key => {
         const board = buildAwardLeaderboard(career, key);
@@ -2553,7 +2590,6 @@ function formatStatVal(key, val) {
     if (typeof val === 'number' && !Number.isInteger(val)) return val.toFixed(1);
     return val;
 }
-// Fields that should aggregate as a MAX across seasons (career-best) rather than a SUM
 const STAT_AGGREGATE_MAX = { highGame: true };
 
 function renderStatsTab(career) {
@@ -2614,12 +2650,19 @@ function bindEditTabAfterRender(career) {
 }
 function editFormHTML(career) {
     const sm = SPORT_META[career.sport];
+    const activeColorName = resolveHairColorName(career.appearance.hairColor);
+
     return `
     <div class="creatorLayout">
       <div class="creatorPreview">
         <div class="avatarFrame" id="editAvatarPreview">${buildAvatarSVG({
-        skinTone: career.appearance.skinTone, hairStyle: career.appearance.hairStyle, hairColor: career.appearance.hairColor,
-        jerseyColor: sm.accent, number: career.number, heightIn: career.heightIn, weightLb: career.weightLb,
+        skinTone: career.appearance.skinTone,
+        hairStyle: career.appearance.hairStyle,
+        hairColor: career.appearance.hairColor,
+        jerseyColor: sm.accent,
+        number: career.number,
+        heightIn: career.heightIn,
+        weightLb: career.weightLb,
     })}</div>
         ${positionLabel(career) ? `<div class="lockedPosition">Position: <strong>${positionLabel(career)}</strong> <span class="lockedPosition__tag">locked</span></div>` : ''}
       </div>
@@ -2654,10 +2697,16 @@ function editFormHTML(career) {
             ${SKIN_TONES.map(t => `<button type="button" class="swatch ${career.appearance.skinTone === t ? 'swatch--active' : ''}" style="background:${t}" data-action="edit-pick-skin" data-tone="${t}"></button>`).join('')}
           </div></div>
           <div class="field"><span class="field__label">Hair Style</span><div class="chipRow">
-            ${HAIR_STYLES.map(s => `<button type="button" class="chip ${career.appearance.hairStyle === s ? 'chip--active' : ''}" data-action="edit-pick-hairstyle" data-style="${s}">${s}</button>`).join('')}
+            ${HAIR_STYLES.map(s => `<button type="button" class="chip ${career.appearance.hairStyle === s ? 'chip--active' : ''}" data-action="edit-pick-hairstyle" data-style="${s}">${hairStyleLabel(s)}</button>`).join('')}
           </div></div>
           <div class="field"><span class="field__label">Hair Color</span><div class="swatchRow">
-            ${HAIR_COLORS.map(c => `<button type="button" class="swatch swatch--sm ${career.appearance.hairColor === c ? 'swatch--active' : ''}" style="background:${c}" data-action="edit-pick-haircolor" data-color="${c}"></button>`).join('')}
+            ${HAIR_COLORS.map(c => `<button type="button"
+                class="swatch swatch--sm ${activeColorName === c.name ? 'swatch--active' : ''}"
+                style="background:${c.hex}"
+                data-action="edit-pick-haircolor"
+                data-color-name="${c.name}"
+                data-color-hex="${c.hex}"
+                aria-label="${c.name} hair color"></button>`).join('')}
           </div></div>
         </section>
         <button type="button" class="btn btn--primary btn--block btn--lg" data-action="edit-save">Save Changes</button>
@@ -2674,8 +2723,13 @@ function bindEditEvents(career) {
     const sm = SPORT_META[career.sport];
     const refresh = () => {
         qs('editAvatarPreview').innerHTML = buildAvatarSVG({
-            skinTone: career.appearance.skinTone, hairStyle: career.appearance.hairStyle, hairColor: career.appearance.hairColor,
-            jerseyColor: sm.accent, number: career.number, heightIn: career.heightIn, weightLb: career.weightLb,
+            skinTone: career.appearance.skinTone,
+            hairStyle: career.appearance.hairStyle,
+            hairColor: career.appearance.hairColor,
+            jerseyColor: sm.accent,
+            number: career.number,
+            heightIn: career.heightIn,
+            weightLb: career.weightLb,
         });
     };
     qs('e-name').addEventListener('input', e => { career.name = e.target.value; saveState(); });
@@ -2815,7 +2869,12 @@ function handleAction(action, btn) {
         case 'creator-reroll-hometown': creatorState.hometown = randomHometown(); qs('f-hometown').value = creatorState.hometown; return;
         case 'creator-pick-skin': creatorState.appearance.skinTone = btn.dataset.tone; refreshCreatorForm(sport); return;
         case 'creator-pick-hairstyle': creatorState.appearance.hairStyle = btn.dataset.style; refreshCreatorForm(sport); return;
-        case 'creator-pick-haircolor': creatorState.appearance.hairColor = btn.dataset.color; refreshCreatorForm(sport); return;
+        case 'creator-pick-haircolor': {
+            /* Store as a named object so saveState persists a stable value */
+            creatorState.appearance.hairColor = { name: btn.dataset.colorName, hex: btn.dataset.colorHex };
+            refreshCreatorForm(sport);
+            return;
+        }
         case 'creator-submit': {
             const name = (creatorState.name || '').trim();
             if (!name) { toast('Please enter a name.', 'error'); qs('f-name').focus(); return; }
@@ -2830,9 +2889,28 @@ function handleAction(action, btn) {
         }
 
         /* ---- edit ---- */
-        case 'edit-pick-skin': { const c = currentCareerFromRoute(); c.appearance.skinTone = btn.dataset.tone; saveState(); bindEditTabAfterRender(c); return; }
-        case 'edit-pick-hairstyle': { const c = currentCareerFromRoute(); c.appearance.hairStyle = btn.dataset.style; saveState(); bindEditTabAfterRender(c); return; }
-        case 'edit-pick-haircolor': { const c = currentCareerFromRoute(); c.appearance.hairColor = btn.dataset.color; saveState(); bindEditTabAfterRender(c); return; }
+        case 'edit-pick-skin': {
+            const c = currentCareerFromRoute();
+            c.appearance.skinTone = btn.dataset.tone;
+            saveState();
+            bindEditTabAfterRender(c);
+            return;
+        }
+        case 'edit-pick-hairstyle': {
+            const c = currentCareerFromRoute();
+            c.appearance.hairStyle = btn.dataset.style;
+            saveState();
+            bindEditTabAfterRender(c);
+            return;
+        }
+        case 'edit-pick-haircolor': {
+            const c = currentCareerFromRoute();
+            /* Store as object matching the creator format */
+            c.appearance.hairColor = { name: btn.dataset.colorName, hex: btn.dataset.colorHex };
+            saveState();
+            bindEditTabAfterRender(c);
+            return;
+        }
         case 'edit-save': {
             const c = currentCareerFromRoute(); saveState(); toast('Changes saved.', 'success');
             navigate(`#/career/${c.sport}/${c.id}/overview`);
