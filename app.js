@@ -531,6 +531,39 @@ function buildAvatarSVG(opts) {
     </g>
   </svg>`;
 }
+function hairImageTag(style, colorName) {
+    if (!style || style === 'bald') return '';
+
+    const resolvedColor = resolveHairColorName(colorName);
+    const filename = `${style}-${resolvedColor}`;
+
+    // Default values (what you currently have)
+    let imgX = 0;
+    let imgY = 0;
+    let imgWidth = 208;
+    let imgHeight = 220;
+
+    // --- Tweak these to nudge the hair into place ---
+    // Example: Sliding the hair down by 15px and scaling it up slightly
+    imgY = -10;        // Positive numbers push the image down
+    imgX = -11;       // Negative numbers push the image left to keep it centered
+    imgWidth = 228;   // Increased width to scale it up
+    imgHeight = 230;  // Increased height to scale it up
+
+    /* // OPTIONAL: If different styles need different tweaks, use a switch statement:
+    if (style === 'Short') {
+        imgY = 18;
+    } else if (style === 'Long-Curly') {
+        imgY = 10;
+        imgX = -5;
+    }
+    */
+
+    return `<image href="${filename}.png"
+        x="${imgX}" y="${imgY}" width="${imgWidth}" height="${imgHeight}"
+        preserveAspectRatio="xMidYMid meet"
+        style="pointer-events:none"/>`;
+}
 
 function escapeHtmlSvg(s) { return String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])); }
 
