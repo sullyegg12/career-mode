@@ -475,8 +475,8 @@ function buildAvatarSVG(opts) {
     <g clip-path="url(#frameClip)">
       <rect width="208" height="220" fill="#171B21"/>
       <g transform="translate(104 222) scale(${frameScale} 1) translate(-104 -222)">
-        <path d="M34 220c0-38 9-66 27-82c10 18 25 28 43 28s33-10 43-28c18 16 27 44 27 82z" fill="${jerseyColor}"/>
-        <path d="M34 220c0-38 9-66 27-82c4 7 8.5 13 13.5 18c-13 18-20.5 40-20.5 64z" fill="#000" opacity=".13"/>
+        <path d="M34 220C34 182 43 152 61 130C68 124 86 118 104 118C122 118 140 124 147 130C165 152 174 182 174 220Z" fill="${jerseyColor}"/>
+        <path d="M34 220C34 182 43 152 61 130C63 127 65 123 66 121C55 150 45 184 34 220Z" fill="#000" opacity=".13"/>
         <text x="104" y="204" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-weight="700" font-size="28" fill="#fff" opacity=".92">${escapeHtmlSvg(numStr)}</text>
         <circle cx="104" cy="82" r="40" fill="${skinTone}"/>
         ${hairPath(hairStyle, hairColor)}
