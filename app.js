@@ -217,6 +217,21 @@ const RETIREMENT_RULES = {
 const MAX_DECLINE_PER_SEASON = 6;
 const CONDITIONING_START = 58;
 
+/* ---- Career Tiers: chosen at creation, cap how dominant a player can be ----
+   Each tier defines a perfCap (max raw performanceScore before badge bonuses),
+   an awardBias multiplier on buildAwardLeaderboard competition (higher = harder
+   to win awards), and a description shown in the creator UI.
+   This lets you simulate everything from a bench warmer to an all-time great. */
+const CAREER_TIERS = {
+    goat:       { label: 'G.O.A.T.',       desc: 'All-time greatness. MVPs, titles, and legacy.',               perfCap: 100, awardBias: 0.55, statMult: 1.0  },
+    allstar:    { label: 'All-Star',        desc: 'A perennial All-Star and franchise cornerstone.',             perfCap: 88,  awardBias: 0.80, statMult: 0.90 },
+    star:       { label: 'Star',            desc: 'A clear starter and occasional All-Star.',                    perfCap: 79,  awardBias: 1.10, statMult: 0.80 },
+    starter:    { label: 'Starter',         desc: 'A reliable starter — solid but rarely headline-grabbing.',   perfCap: 70,  awardBias: 1.50, statMult: 0.70 },
+    roleplayer: { label: 'Role Player',     desc: 'A key piece off the bench or a specialist starter.',         perfCap: 61,  awardBias: 2.20, statMult: 0.58 },
+    benchwarmer:{ label: 'Bench Warmer',    desc: 'Just happy to be here. Every good game is a victory.',       perfCap: 50,  awardBias: 3.50, statMult: 0.45 },
+};
+const DEFAULT_TIER = 'star';
+
 const TOUR_SHAPE = {
     bowling: { eventsPerSeason: 20, fieldSize: 70 },
     golf:    { eventsPerSeason: 42, fieldSize: 90 },
@@ -334,7 +349,14 @@ function performanceScore(career) {
     const base = career.overall;
     const noise = (rngNormal01() - 0.5) * 60;
     const badgeBonus = totalBadgeBonus(career);
-    return clamp(Math.round(base * 0.6 + 40 * rngNormal01() * 0.6 + noise * 0.5 + base * 0.1 + badgeBonus), 5, 100);
+    const raw = clamp(Math.round(base * 0.6 + 40 * rngNormal01() * 0.6 + noise * 0.5 + base * 0.1 + badgeBonus), 5, 100);
+    /* Occasional blowup game (+15%) or stinker (-20%) for realism */
+    const roll = Math.random();
+    const modifier = roll < 0.08 ? 1.15 : (roll < 0.16 ? 0.80 : 1.0);
+    const modded = clamp(Math.round(raw * modifier), 5, 100);
+    /* Apply tier cap — G.O.A.T. is uncapped, lower tiers can't consistently peak */
+    const tier = CAREER_TIERS[career.tier || DEFAULT_TIER] || CAREER_TIERS[DEFAULT_TIER];
+    return Math.min(modded, tier.perfCap);
 }
 
 const BADGES = {
@@ -531,39 +553,6 @@ function buildAvatarSVG(opts) {
     </g>
   </svg>`;
 }
-function hairImageTag(style, colorName) {
-    if (!style || style === 'bald') return '';
-
-    const resolvedColor = resolveHairColorName(colorName);
-    const filename = `${style}-${resolvedColor}`;
-
-    // Default values (what you currently have)
-    let imgX = 0;
-    let imgY = 0;
-    let imgWidth = 208;
-    let imgHeight = 220;
-
-    // --- Tweak these to nudge the hair into place ---
-    // Example: Sliding the hair down by 15px and scaling it up slightly
-    imgY = -10;        // Positive numbers push the image down
-    imgX = -11;       // Negative numbers push the image left to keep it centered
-    imgWidth = 228;   // Increased width to scale it up
-    imgHeight = 230;  // Increased height to scale it up
-
-    /* // OPTIONAL: If different styles need different tweaks, use a switch statement:
-    if (style === 'Short') {
-        imgY = 18;
-    } else if (style === 'Long-Curly') {
-        imgY = 10;
-        imgX = -5;
-    }
-    */
-
-    return `<image href="${filename}.png"
-        x="${imgX}" y="${imgY}" width="${imgWidth}" height="${imgHeight}"
-        preserveAspectRatio="xMidYMid meet"
-        style="pointer-events:none"/>`;
-}
 
 function escapeHtmlSvg(s) { return String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])); }
 
@@ -580,7 +569,7 @@ const FOOTBALL_STAT_FIELDS = {
     secondary:[['gp','GP'],['tackles','TKL'],['ints','INT'],['passDef','PD']],
     kicker:   [['gp','GP'],['fgm','FGM'],['fga','FGA'],['xpm','XPM'],['points','PTS']],
 };
-const BASKETBALL_STAT_FIELDS = [['gp','GP'],['pts','PTS'],['reb','REB'],['ast','AST'],['stl','STL'],['blk','BLK'],['fgm','FGM'],['fga','FGA'],['tpm','3PM']];
+const BASKETBALL_STAT_FIELDS = [['gp','GP'],['pts','PTS'],['reb','REB'],['ast','AST'],['stl','STL'],['blk','BLK'],['fgm','FGM'],['fga','FGA'],['tpm','3PM'],['tpa','3PA']];
 const BASEBALL_STAT_FIELDS = {
     hitter:  [['gp','G'],['ab','AB'],['h','H'],['hr','HR'],['rbi','RBI'],['r','R'],['sb','SB'],['bb','BB'],['so','SO']],
     pitcher: [['gp','G'],['ip','IP'],['er','ER'],['h','H'],['bb','BB'],['k','K'],['w','W'],['l','L'],['sv','SV']],
@@ -682,15 +671,37 @@ function generateBasketballLine(posKey, perf) {
     const p = perf / 100;
     const isBig = group === 'big';
     const isGuard = group === 'guard';
-    const pts = clamp(r(6, 14) + Math.round(p * 22), 0, 62);
-    const reb = clamp(r(1, isBig ? 6 : 2) + Math.round(p * (isBig ? 10 : 5)), 0, 28);
-    const ast = clamp(r(0, isGuard ? 5 : 2) + Math.round(p * (isGuard ? 8 : 4)), 0, 18);
-    const stl = clamp(r(0, 2) + (Math.random() < p * 0.6 ? 1 : 0), 0, 6);
-    const blk = clamp((isBig ? r(0, 2) : 0) + (Math.random() < p * 0.3 ? 1 : 0), 0, 8);
-    const fga = clamp(r(6, 12) + Math.round(p * 8), 1, 32);
-    const fgm = clamp(Math.round(fga * clamp(0.36 + p * 0.32, 0.28, 0.68)), 0, fga);
-    const tpm = group === 'big' ? (Math.random() < 0.1 ? 1 : 0) : clamp(r(0, 2) + Math.round(p * 3), 0, 9);
-    return { gp: 1, pts, reb, ast, stl, blk, fgm, fga, tpm };
+    const isWing = group === 'wing';
+
+    /* Occasional blowup game (10% chance) or stinker (10% chance) for realism */
+    const gameModifier = Math.random() < 0.10 ? 1.35 : (Math.random() < 0.10 ? 0.55 : 1.0);
+
+    /* FGA scales with role — guards shoot more than bigs */
+    const baseFGA = isBig ? r(6, 11) : (isGuard ? r(8, 15) : r(7, 13));
+    const fga = clamp(Math.round((baseFGA + p * 6) * gameModifier), 1, 30);
+
+    /* FG% is position-realistic: guards .40-.48 elite, bigs .48-.58 elite */
+    const fgPctBase = isBig ? (0.42 + p * 0.14) : (0.36 + p * 0.12);
+    const fgPct = clamp(fgPctBase, 0.28, isBig ? 0.62 : 0.52);
+    const fgm = clamp(Math.round(fga * fgPct), 0, fga);
+
+    /* 3-point attempts tracked separately */
+    const tpaBase = isBig ? (Math.random() < 0.18 ? 1 : 0) : (isGuard ? clamp(r(2, 5) + Math.round(p * 3), 0, 10) : clamp(r(1, 3) + Math.round(p * 2), 0, 7));
+    const tpa = clamp(Math.round(tpaBase * gameModifier), 0, 12);
+    const tp3Pct = clamp(0.28 + p * 0.12, 0.22, 0.43);
+    const tpm = clamp(Math.round(tpa * tp3Pct), 0, tpa);
+
+    /* Points from FG + FT (rough) — NOT simply fgm*2+tpm to avoid double counting */
+    const ftMade = clamp(Math.round((p * 3.5 + r(0, 2)) * gameModifier), 0, 12);
+    /* Pts = (fgm - tpm)*2 + tpm*3 + ftMade, but bounded for realism */
+    const rawPts = (fgm - tpm) * 2 + tpm * 3 + ftMade;
+    const pts = clamp(rawPts, 0, 52);
+
+    const reb = clamp(Math.round((r(1, isBig ? 6 : 2) + p * (isBig ? 9 : isGuard ? 3 : 5)) * (gameModifier > 1 ? 1.1 : 1)), 0, 24);
+    const ast = clamp(Math.round((r(0, isGuard ? 5 : 2) + p * (isGuard ? 7 : 3)) * (gameModifier > 1 ? 1.1 : 1)), 0, 16);
+    const stl = clamp(r(0, 2) + (Math.random() < p * 0.5 ? 1 : 0), 0, 5);
+    const blk = clamp((isBig ? r(0, 2) : 0) + (Math.random() < p * 0.25 ? 1 : 0), 0, 7);
+    return { gp: 1, pts, reb, ast, stl, blk, fgm, fga, tpm, tpa };
 }
 function generateBaseballLine(posKey, perf) {
     const isPitcher = ['SP', 'RP'].includes(posKey);
@@ -709,15 +720,18 @@ function generateBaseballLine(posKey, perf) {
         return { gp: 1, ip, h, er, bb, k, w, l, sv };
     } else {
         const ab = r(3, 5);
-        const hitProb = clamp(0.22 + p * 0.32, 0.12, 0.55);
+        /* hitProb scaled to match real MLB batting averages: ~.180 poor, ~.260 avg, ~.310 elite */
+        const hitProb = clamp(0.145 + p * 0.175, 0.10, 0.345);
         let h = 0; for (let i = 0; i < ab; i++) if (Math.random() < hitProb) h++;
-        const hr = (h > 0 && Math.random() < 0.08 + p * 0.12) ? 1 : 0;
+        const hr = (h > 0 && Math.random() < 0.05 + p * 0.10) ? 1 : 0;
         const rbi = clamp(h * (Math.random() < 0.4 ? 1 : 0) + hr * r(1, 2), 0, 6);
         const rr = clamp((h > 0 ? r(0, 1) : 0) + (Math.random() < p * 0.3 ? 1 : 0), 0, 4);
         const sb = (Math.random() < 0.08 + p * 0.05) ? 1 : 0;
         const bb = (Math.random() < 0.18) ? 1 : 0;
-        const so = clamp(ab - h - (Math.random() < 0.5 ? 1 : 0), 0, ab);
-        return { gp: 1, ab, h, hr, rbi, r: rr, sb, bb, so: Math.max(0, so) };
+        /* Strikeouts: bad hitters K more; good hitters K less */
+        const kRate = clamp(0.28 - p * 0.14, 0.08, 0.32);
+        let so = 0; for (let i = 0; i < (ab - h); i++) if (Math.random() < kRate) so++;
+        return { gp: 1, ab, h, hr, rbi, r: rr, sb, bb, so };
     }
 }
 function round1(n) { return Math.round(n * 10) / 10; }
@@ -768,7 +782,8 @@ function generateLeague(sport) {
             name: tn.name, city: tn.city, mascot: tn.mascot,
             conference: confNames[confIdx],
             division: DIVISION_NAMES[divIdx],
-            rating: randInt(68, 92),
+            /* Bell-curve team ratings: most teams 68-84, a few true elites/cellar-dwellers */
+            rating: clamp(Math.round(randNormal(76, 10)), 52, 97),
             wins: 0, losses: 0, ties: 0,
             pf: 0, pa: 0,
             streak: 0,
@@ -992,6 +1007,7 @@ function createCareer(sport, form) {
         name: form.name, number: form.number, gender: form.gender, hometown: form.hometown,
         heightIn: form.heightIn, weightLb: form.weightLb, birthday: form.birthday,
         position: HAS_POSITIONS[sport] ? form.position : null,
+        tier: form.tier || DEFAULT_TIER,
         appearance: form.appearance,
         createdAt: Date.now(), updatedAt: Date.now(),
         stage: 'highschool', season: 1, skillPoints: 0,
@@ -1215,11 +1231,19 @@ function callUpToMajors(career) {
 }
 
 function declareTurnPro(career) {
-    archiveSeason(career, 'college', career.college.name);
+    try {
+        archiveSeason(career, 'college', career.college.name);
+    } catch(e) { /* college may already be archived on retry */ }
+    /* Ensure all fields expected by the tour engine exist */
     career.tour = { rivals: generateRivals(career.sport), schedule: generateTourSchedule(career.sport), eventIndex: 0 };
     career.seasonStats = newStatTotals(career.sport, 'GEN');
     career.stage = 'tour';
     career.season = 1;
+    career.seasonGameCount = 0;
+    career.seasonPerfSum = 0; career.seasonPerfGames = 0;
+    career.priorSeasonGrade = null;
+    /* Ensure trade stub always exists — tour sports don't use it but the field must be present */
+    career.trade = { lastRequestGameCount: -999 };
     career.age = AGE_MILESTONES[career.sport].proStart;
     career.retirementAge = rollRetirementAge(career.sport);
     logHistory(career, `Turned pro and earned a card on the ${SPORT_META[career.sport].leagueName}.`);
@@ -1342,6 +1366,11 @@ function runPlayoffs(league, sport, userTeamId) {
     else if (roundLog.userEliminated) summary = `Eliminated in the ${roundLog.userEliminated}. Champion: ${championResult.champion.name}.`;
     else summary = `Champion: ${championResult.champion.name}.`;
 
+    /* Store this year's champion in the league history */
+    if (!league.championHistory) league.championHistory = [];
+    league.championHistory.push({ season: league.season || 1, name: championResult.champion.name });
+    if (league.championHistory.length > 10) league.championHistory = league.championHistory.slice(-10);
+
     return {
         madePlayoffs: true, summary, champion: championResult.champion.name, championId: championResult.champion.id,
         wonIt, wonConference, finalsLoserId: championResult.runnerUp ? championResult.runnerUp.id : null,
@@ -1366,13 +1395,14 @@ function isOffensePosition(sport, posKey) { return sport !== 'football' || OFFEN
 function isDefensePosition(sport, posKey) { return sport !== 'football' || DEFENSE_GROUPS_FB.includes(posInfo(sport, posKey).group); }
 
 function awardLabels(sport) {
-    if (sport === 'football') return { mvp: 'MVP', dpoy: 'DPOY', opoy: 'OPOY', mip: 'MIP', roty: 'ROTY', allstar: 'Pro Bowl' };
-    if (sport === 'basketball') return { mvp: 'MVP', dpoy: 'DPOY', mip: 'MIP', roty: 'ROTY', allstar: 'All-Star' };
+    if (sport === 'football') return { mvp: 'MVP', dpoy: 'DPOY', opoy: 'OPOY', mip: 'MIP', roty: 'ROTY', allstar: 'Pro Bowl', superBowlMvp: 'Super Bowl MVP' };
+    if (sport === 'basketball') return { mvp: 'MVP', dpoy: 'DPOY', mip: 'MIP', roty: 'ROTY', allstar: 'All-Star', sixthMan: '6th Man of the Year', allDefFirst: '1st Team All-Defense', allDefSecond: '2nd Team All-Defense', allDefThird: '3rd Team All-Defense', allRookie: 'All-Rookie Team' };
     if (sport === 'baseball') return { mvp: 'MVP', dpoy: 'Golden Glove', mip: 'MIP', roty: 'ROTY', allstar: 'All-Star' };
     return {};
 }
 function awardKeysForSport(sport) {
     if (sport === 'football') return ['mvp', 'opoy', 'dpoy', 'mip', 'roty', 'allstar'];
+    if (sport === 'basketball') return ['mvp', 'dpoy', 'sixthMan', 'mip', 'roty', 'allstar'];
     return ['mvp', 'dpoy', 'mip', 'roty', 'allstar'];
 }
 function isEligibleForAward(career, key) {
@@ -1381,6 +1411,8 @@ function isEligibleForAward(career, key) {
     if (key === 'mip') return career.season > 1;
     if (key === 'opoy') return sport === 'football' && isOffensePosition(sport, career.position);
     if (key === 'dpoy' && sport === 'football') return isDefensePosition(sport, career.position);
+    /* 6th Man: primarily for players below 80 overall — higher overall players are almost always starters */
+    if (key === 'sixthMan') return sport === 'basketball' && career.overall < 85;
     return true;
 }
 function buildAwardLeaderboard(career, key) {
@@ -1404,11 +1436,16 @@ function buildAwardLeaderboard(career, key) {
     const entries = [];
     const poolSize = career.sport === 'football' ? randInt(1000, 1500) : (career.sport === 'basketball' ? randInt(300, 500) : pool.length * 25);
 
+    const tier = CAREER_TIERS[career.tier || DEFAULT_TIER] || CAREER_TIERS[DEFAULT_TIER];
     for (let i = 0; i < poolSize; i++) {
         let grade;
         let t = pick(pool);
         if (key === 'mip') grade = 50 + clamp(randInt(-8, 18), -30, 40);
-        else grade = clamp(t.rating + randInt(-25, 15), 35, 99);
+        else {
+            /* awardBias > 1 means more entries score higher → harder to win */
+            const bias = Math.round((tier.awardBias - 1) * 12);
+            grade = clamp(t.rating + randInt(-20 + bias, 18 + bias), 35, 99);
+        }
         entries.push({ name: fictionalStarName(t), teamName: t.name, isUser: false, grade });
     }
     entries.push({ name: career.name, teamName: myTeam.name, isUser: true, grade: userVal });
@@ -1440,19 +1477,47 @@ function finalizeSeasonAwards(career, playoffResult) {
                 else if (board.rank <= 15) teamTier = '3rd Team All-NBA';
                 if (teamTier) items.push({ key: 'allnba', label: teamTier, won: true, rank: board.rank, total: board.total });
             }
-        } else {
+        } else if (key === 'dpoy' && sport === 'basketball') {
+            /* Defensive player of the year — also determines All-Defensive team placement */
             const won = board.rank === 1;
             items.push({ key, label: labels[key], won, rank: board.rank, total: board.total });
+            let defTeam = null;
+            if (board.rank <= 5) defTeam = labels.allDefFirst;
+            else if (board.rank <= 10) defTeam = labels.allDefSecond;
+            else if (board.rank <= 15) defTeam = labels.allDefThird;
+            if (defTeam) items.push({ key: 'alldef', label: defTeam, won: true, rank: board.rank, total: board.total });
+        } else if (key === 'roty' && sport === 'basketball') {
+            const won = board.rank === 1;
+            items.push({ key, label: labels[key], won, rank: board.rank, total: board.total });
+            /* Top 10 rookies make the All-Rookie team */
+            if (board.rank <= 10) items.push({ key: 'allrookie', label: labels.allRookie, won: true, rank: board.rank, total: board.total });
+        } else if (key === 'sixthMan') {
+            const won = board.rank === 1;
+            items.push({ key, label: labels.sixthMan, won, rank: board.rank, total: board.total });
+        } else {
+            const won = board.rank === 1;
+            items.push({ key, label: labels[key] || key, won, rank: board.rank, total: board.total });
         }
     });
 
+    /* Playoff awards */
     if (playoffResult && playoffResult.madePlayoffs) {
-        if (playoffResult.wonConference) {
-            const bestOnTeam = wasBestOnOwnTeam(career);
-            if (bestOnTeam) {
-                items.push({ key: 'confFinalsMvp', label: 'Conference Finals MVP', won: true, rank: 1, total: 1 });
-                if (playoffResult.wonIt) items.push({ key: 'finalsMvp', label: 'Finals MVP', won: true, rank: 1, total: 1 });
+        if (playoffResult.wonIt) {
+            /* Football: Super Bowl MVP (no conference MVP) */
+            if (sport === 'football') {
+                const bestOnTeam = wasBestOnOwnTeam(career);
+                if (bestOnTeam) items.push({ key: 'superBowlMvp', label: labels.superBowlMvp || 'Super Bowl MVP', won: true, rank: 1, total: 1 });
+            } else {
+                /* Basketball/Baseball: Finals MVP */
+                if (playoffResult.wonConference) {
+                    const bestOnTeam = wasBestOnOwnTeam(career);
+                    if (bestOnTeam) items.push({ key: 'finalsMvp', label: 'Finals MVP', won: true, rank: 1, total: 1 });
+                }
             }
+        } else if (playoffResult.wonConference && sport !== 'football') {
+            /* Conference Finals MVP only for non-football */
+            const bestOnTeam = wasBestOnOwnTeam(career);
+            if (bestOnTeam) items.push({ key: 'confFinalsMvp', label: 'Conference Finals MVP', won: true, rank: 1, total: 1 });
         }
     }
 
@@ -1467,7 +1532,22 @@ function finalizeSeasonAwards(career, playoffResult) {
 
 function shouldRetireNext(career) {
     if (!career.retirementAge) return false;
+    /* If the player already used their one extension, enforce retirement */
+    if (career.retirementExtensionUsed) return (career.age + 1) >= career.retirementAge + 3;
     return (career.age + 1) >= career.retirementAge;
+}
+function canExtendCareer(career) {
+    /* One-time extension available: hasn't used it yet, and they're at the retirement threshold */
+    if (career.retirementExtensionUsed) return false;
+    if (!career.retirementAge) return false;
+    return (career.age + 1) >= career.retirementAge;
+}
+function extendCareer(career) {
+    career.retirementExtensionUsed = true;
+    /* Push the hard retirement wall back 3 seasons — decline accelerates but you can keep going */
+    career.retirementAge = career.retirementAge + 3;
+    logHistory(career, `${career.name} chooses to push on — playing out more seasons despite Father Time.`);
+    saveState();
 }
 function applyAgingRegression(career) {
     const rules = RETIREMENT_RULES[career.sport];
@@ -1506,22 +1586,30 @@ function startNewProSeason(career) {
     });
     league.schedule = buildSeasonSchedule(league.teams.map(t => t.id), LEAGUE_SHAPE[career.sport].games);
     league.week = 0; league.complete = false; league.playoffResult = null;
+    if (!league.season) league.season = 1;
+    league.season++;
     career.priorSeasonGrade = computeSeasonGrade(career);
     career.season++;
     career.age++;
     applyAgingRegression(career);
     career.seasonGameCount = 0;
     career.seasonPerfSum = 0; career.seasonPerfGames = 0;
+    /* Reset trade cooldown so prior season's game count doesn't block new season requests */
+    if (career.trade) career.trade.lastRequestGameCount = -999;
     career.seasonStats = newStatTotals(career.sport, career.position || 'GEN');
     logHistory(career, `Season ${career.season} begins with the ${team.name} (age ${career.age}).`);
     saveState();
 }
 
 function requestTrade(career) {
+    /* Ensure the trade stub always exists (old saves might not have it) */
+    if (!career.trade) career.trade = { lastRequestGameCount: -999 };
     const cooldownGames = 4;
-    if (career.seasonGameCount - career.trade.lastRequestGameCount < cooldownGames) {
-        return { ok: false, reason: 'cooldown', gamesLeft: cooldownGames - (career.seasonGameCount - career.trade.lastRequestGameCount) };
+    const gamesSinceLast = career.seasonGameCount - career.trade.lastRequestGameCount;
+    if (gamesSinceLast < cooldownGames) {
+        return { ok: false, reason: 'cooldown', gamesLeft: cooldownGames - gamesSinceLast };
     }
+    /* Always update the timestamp so the next request has to wait again */
     career.trade.lastRequestGameCount = career.seasonGameCount;
     const acceptChance = clamp(0.25 + (career.overall - 65) / 130, 0.15, 0.7);
     const accepted = Math.random() < acceptChance;
@@ -1863,6 +1951,7 @@ function defaultCreatorState(sport) {
         heightIn: baseline.h, weightLb: baseline.w,
         birthday: randomBirthday(16, 18, todayYear()),
         position: pos,
+        tier: DEFAULT_TIER,
         /* Default hair color stored as an object */
         appearance: { skinTone: SKIN_TONES[2], hairStyle: HAIR_STYLES[1], hairColor: HAIR_COLORS[0] },
     };
@@ -1877,6 +1966,7 @@ function randomizeCreatorState(sport) {
         weightLb: clamp(baseline.w + randInt(-25, 25), 110, 360),
         birthday: randomBirthday(16, 18, todayYear()),
         position: pos,
+        tier: DEFAULT_TIER,
         /* Pick a random named color object */
         appearance: { skinTone: pick(SKIN_TONES), hairStyle: pick(HAIR_STYLES), hairColor: pick(HAIR_COLORS) },
     };
@@ -2008,6 +2098,18 @@ function creatorFormHTML(sport) {
                   data-color-hex="${c.hex}"
                   aria-label="${c.name} hair color"></button>`).join('')}
             </div>
+          </div>
+        </section>
+
+        <section class="formSection">
+          <h2 class="formSection__title">Career Path</h2>
+          <p class="formSection__hint">This shapes how dominant your player can become — it affects peak stats, how hard it is to win awards, and how often you have monster games vs. quiet ones. You can't change this after creation.</p>
+          <div class="posGrid">
+            ${Object.entries(CAREER_TIERS).map(([key, tier]) => `
+              <button type="button" class="posChip ${cs.tier === key ? 'posChip--active' : ''}" data-action="creator-pick-tier" data-tier="${key}" style="min-width:0">
+                <span class="posChip__abbr" style="font-size:0.7rem">${escapeHtml(tier.label)}</span>
+                <span class="posChip__label" style="font-size:0.65rem;opacity:0.8">${escapeHtml(tier.desc)}</span>
+              </button>`).join('')}
           </div>
         </section>
 
@@ -2227,9 +2329,10 @@ function renderPrimaryAction(career) {
             const league = career.proLeague;
             if (league.complete) {
                 if (shouldRetireNext(career)) {
-                    return actionCard(`Season ${career.season} Complete`, `${league.playoffResult ? league.playoffResult.summary + ' ' : ''}At age ${career.age}, it's time to hang it up.`, [{ label: 'Retire', action: 'retire-career', danger: true }]);
+                    return actionCard(`Season ${career.season} Complete`, `${league.playoffResult ? league.playoffResult.summary + ' ' : ''}At age ${career.age}, this may be the end of the road.`, [{ label: 'Retire', action: 'retire-career', danger: true }, { label: `Start Season ${career.season + 1}`, action: 'start-new-pro-season', ghost: true }]);
                 }
-                return actionCard(`Season ${career.season} Complete`, league.playoffResult ? league.playoffResult.summary : '', [{ label: `Start Season ${career.season + 1}`, action: 'start-new-pro-season' }, { label: 'Retire Instead', action: 'retire-career', ghost: true }]);
+                const extendBtn = canExtendCareer(career) ? [{ label: 'Push On (1× Extension)', action: 'extend-career', ghost: true }] : [];
+                return actionCard(`Season ${career.season} Complete`, league.playoffResult ? league.playoffResult.summary : '', [{ label: `Start Season ${career.season + 1}`, action: 'start-new-pro-season' }, { label: 'Retire Instead', action: 'retire-career', ghost: true }, ...extendBtn]);
             }
             const weeksLeft = league.schedule.length - league.week;
             const totalGames = league.schedule.length;
@@ -2246,9 +2349,10 @@ function renderPrimaryAction(career) {
             const tour = career.tour;
             if (tour.eventIndex >= tour.schedule.length) {
                 if (shouldRetireNext(career)) {
-                    return actionCard(`Season ${career.season} Complete`, `Final tour points: ${career.seasonStats.points || 0}. At age ${career.age}, it's time to hang it up.`, [{ label: 'Retire', action: 'retire-career', danger: true }]);
+                    return actionCard(`Season ${career.season} Complete`, `Final tour points: ${career.seasonStats.points || 0}. At age ${career.age}, this may be the end of the road.`, [{ label: 'Retire', action: 'retire-career', danger: true }, { label: `Start Season ${career.season + 1}`, action: 'start-new-tour-season', ghost: true }]);
                 }
-                return actionCard(`Season ${career.season} Complete`, `Final tour points: ${career.seasonStats.points || 0}`, [{ label: `Start Season ${career.season + 1}`, action: 'start-new-tour-season' }, { label: 'Retire Instead', action: 'retire-career', ghost: true }]);
+                const extendBtn = canExtendCareer(career) ? [{ label: 'Push On (1× Extension)', action: 'extend-career', ghost: true }] : [];
+                return actionCard(`Season ${career.season} Complete`, `Final tour points: ${career.seasonStats.points || 0}`, [{ label: `Start Season ${career.season + 1}`, action: 'start-new-tour-season' }, { label: 'Retire Instead', action: 'retire-career', ghost: true }, ...extendBtn]);
             }
             const left = tour.schedule.length - tour.eventIndex;
             return actionCard(
@@ -2453,6 +2557,12 @@ function renderTeamSportTab(career) {
       </ol>
     </div>`).join('');
 
+    const champHistory = (league.championHistory || []).slice().reverse();
+    const champSection = champHistory.length ? `<section class="block">
+      <h2 class="block__title">Recent Champions</h2>
+      <div class="gameLogList">${champHistory.map(c => `<div class="gameLogRow"><div class="gameLogRow__main"><span class="gameLogRow__label">Season ${c.season}</span><span class="gameLogRow__summary">${escapeHtml(c.name)}</span></div></div>`).join('')}</div>
+    </section>` : '';
+
     return `
     ${recordCard}
     ${minorsNote}
@@ -2469,6 +2579,7 @@ function renderTeamSportTab(career) {
       <h2 class="block__title">Playoff Standings</h2>
       ${playoffHtml}
     </section>
+    ${champSection}
   `;
 }
 function standingsTableHTML(teams, myTeamId) {
@@ -2597,7 +2708,7 @@ function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; 
 function derivedColumns(sport, pos, totals) {
     if (sport === 'basketball') {
         const gp = totals.gp || 0;
-        return gp ? [['PPG', (totals.pts / gp).toFixed(1)], ['RPG', (totals.reb / gp).toFixed(1)], ['APG', (totals.ast / gp).toFixed(1)], ['SPG', (totals.stl / gp).toFixed(1)], ['BPG', (totals.blk / gp).toFixed(1)], ['FG%', (totals.fga ? (totals.fgm / totals.fga * 100).toFixed(1) : '0.0') + '%']] : [];
+        return gp ? [['PPG', (totals.pts / gp).toFixed(1)], ['RPG', (totals.reb / gp).toFixed(1)], ['APG', (totals.ast / gp).toFixed(1)], ['SPG', (totals.stl / gp).toFixed(1)], ['BPG', (totals.blk / gp).toFixed(1)], ['FG%', (totals.fga ? (totals.fgm / totals.fga * 100).toFixed(1) : '0.0') + '%'], ['3P%', (totals.tpa ? (totals.tpm / totals.tpa * 100).toFixed(1) : '0.0') + '%']] : [];
     }
     if (sport === 'baseball') {
         if (statGroupFor('baseball', pos) === 'pitcher') {
@@ -2900,6 +3011,7 @@ function handleAction(action, btn) {
         } return;
         case 'creator-randomize': randomizeCreatorState(sport); refreshCreatorForm(sport); return;
         case 'creator-reroll-hometown': creatorState.hometown = randomHometown(); qs('f-hometown').value = creatorState.hometown; return;
+        case 'creator-pick-tier': creatorState.tier = btn.dataset.tier; refreshCreatorForm(sport); return;
         case 'creator-pick-skin': creatorState.appearance.skinTone = btn.dataset.tone; refreshCreatorForm(sport); return;
         case 'creator-pick-hairstyle': creatorState.appearance.hairStyle = btn.dataset.style; refreshCreatorForm(sport); return;
         case 'creator-pick-haircolor': {
@@ -2913,6 +3025,7 @@ function handleAction(action, btn) {
             if (!name) { toast('Please enter a name.', 'error'); qs('f-name').focus(); return; }
             if (HAS_POSITIONS[sport] && !creatorState.position) { toast('Please choose a position.', 'error'); return; }
             creatorState.name = name;
+            creatorState.tier = creatorState.tier || DEFAULT_TIER;
             const career = createCareer(sport, creatorState);
             STATE.careers[sport].push(career);
             saveState();
@@ -3027,6 +3140,7 @@ function handleAction(action, btn) {
         }
         case 'start-new-pro-season': { const c = currentCareerFromRoute(); startNewProSeason(c); rerenderCurrentRoute(); toast(`Season ${c.season} underway!`, 'success'); return; }
         case 'retire-career': { const c = currentCareerFromRoute(); retireCareer(c); openModal(retirementModalHTML(c)); return; }
+        case 'extend-career': { const c = currentCareerFromRoute(); extendCareer(c); rerenderCurrentRoute(); toast('Career extended — keep going!', 'success'); return; }
         case 'request-trade': {
             const c = currentCareerFromRoute();
             const res = requestTrade(c);
