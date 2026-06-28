@@ -1316,14 +1316,15 @@ function simulateHighSchoolGame(career) {
 }
 
 function generateCollegeOffers(sport) {
-    const meta = SPORT_META[sport];
-    if (!meta) return [];
+    // Safe metadata key backup mapping
+    const metaKey = sport.endsWith('_college') ? sport : `${sport}_college`;
 
+    // Reinstated uniqueTeamNames fallback generator
     const raw = uniqueTeamNames(3);
     return raw.map((t, i) => {
         return {
             id: 'C' + i,
-            name: t.name,
+            name: t.name + " University", // Makes sure it sounds like a college school!
             city: t.city,
             mascot: t.mascot,
             prestige: randInt(40, 85),
@@ -3126,7 +3127,10 @@ function modalShell(title, bodyHtml, footerHtml) {
 }
 
 function collegeOffersModalHTML(career, offers) {
-    pendingCollegeOffers = offers;
+    if (!career.collegeOffers || career.collegeOffers.length === 0) {
+        const collegeSportKey = career.sport.endsWith('_college') ? career.sport : `${career.sport}_college`;
+        career.collegeOffers = generateCollegeOffers(collegeSportKey);
+    }
     const cards = offers.map((o, i) => `
     <button class="offerCard" data-action="commit-college" data-index="${i}">
       <div class="offerCard__name">${escapeHtml(o.name)}</div>
