@@ -348,7 +348,7 @@ function getCareer(sport, id) {
                 career.attributes[a] = 40;
             }
         });
-        career.overall = computeOverall(career.attributes);
+        career.overall = computeOverall(career.attributes, career.sport, career.position);
     }
     return career;
 }
@@ -382,7 +382,7 @@ function generateStartingAttributes(sport, posKey, heightIn, weightLb) {
     primaryAttrs.forEach((a, i) => base[a] = raw[i]);
 
     // Extra attributes start at 40 — cheap to upgrade but don't inflate overall
-    extraAttrs.forEach(a => base[a] = 40);
+    extraAttrs.forEach(a => base[a] = 50);
 
     const info = posInfo(sport, posKey);
     const heightDelta = (heightIn - info.h) / info.h;
@@ -394,7 +394,19 @@ function generateStartingAttributes(sport, posKey, heightIn, weightLb) {
 
     return base;
 }
-function computeOverall(attributes) {
+function computeOverall(attributes, sport, posKey) {
+    // For basketball, primary attrs (first 6) count double weight
+    if (sport === 'basketball' && posKey && POSITIONS.basketball[posKey]) {
+        const allAttrs = POSITIONS.basketball[posKey].attrs;
+        const primaryAttrs = new Set(allAttrs.slice(0, 6));
+        let weightedSum = 0, totalWeight = 0;
+        Object.entries(attributes).forEach(([k, v]) => {
+            const weight = primaryAttrs.has(k) ? 2 : 1;
+            weightedSum += v * weight;
+            totalWeight += weight;
+        });
+        return clamp(Math.round(weightedSum / totalWeight), 40, 99);
+    }
     const vals = Object.values(attributes);
     return clamp(Math.round(vals.reduce((a, b) => a + b, 0) / vals.length), 40, 99);
 }
@@ -423,7 +435,7 @@ function upgradeAttribute(career, attrName) {
     const cost = upgradeCost(career.attributes[attrName]);
     career.skillPoints -= cost;
     career.attributes[attrName] = clamp(career.attributes[attrName] + 1, ATTR_MIN, ATTR_MAX);
-    career.overall = computeOverall(career.attributes);
+    career.overall = computeOverall(career.attributes, career.sport, career.position);
     saveState();
     return true;
 }
@@ -1315,7 +1327,7 @@ function createCareer(sport, form) {
         createdAt: Date.now(), updatedAt: Date.now(),
         stage: 'highschool', season: 1, skillPoints: 0,
         age: 17, retirementAge: null, conditioning: CONDITIONING_START,
-        attributes, overall: computeOverall(attributes),
+        attributes, overall: computeOverall(attributes, sport, posKey),
         badges: [],
         seasonPerfSum: 0, seasonPerfGames: 0, priorSeasonGrade: null,
         awardsLog: [], careerAwardCounts: {},
@@ -1899,7 +1911,7 @@ function applyAgingRegression(career) {
     if (decline <= 0) return 0;
     const attrs = roleAttrs(career.sport, career.position || 'GEN');
     attrs.forEach(a => { career.attributes[a] = clamp(career.attributes[a] - decline, 30, 99); });
-    career.overall = computeOverall(career.attributes);
+    career.overall = computeOverall(career.attributes, career.sport, career.position);
     logHistory(career, `Father Time: decline sets in at age ${career.age} (-${decline} to every attribute this season).`);
     return decline;
 }
