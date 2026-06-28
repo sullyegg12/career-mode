@@ -106,6 +106,15 @@ function randomBirthday(minAge, maxAge, refYear) {
     const day = randInt(1, 28);
     return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
+function uniqueTeamNames(count) {
+  const cities = pickN(CITY_NAMES, count);
+  const mascots = pickN(MASCOTS, count);
+  return cities.map((c, i) => ({ 
+    city: c, 
+    mascot: mascots[i], 
+    name: `${c} ${mascots[i]}` 
+  }));
+}
 function generateLeague(sport) {
   const shape = LEAGUE_SHAPE[sport];
   
