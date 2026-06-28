@@ -204,11 +204,11 @@ const POSITIONS = {
         K:  { label: 'Kicker', group: 'kicker', attrs: ['Kick Power','Kick Accuracy','Awareness','Consistency','Clutch','Stamina'], h: 71, w: 200 },
     },
     basketball: {
-        PG: { label: 'Point Guard', group: 'guard', attrs: ['Ball Handling','Passing','Three Point','Speed','Perimeter Defense','Vision'], h: 74, w: 180 },
-        SG: { label: 'Shooting Guard', group: 'guard', attrs: ['Three Point','Mid Range','Finishing','Speed','Perimeter Defense','Ball Handling'], h: 77, w: 195 },
-        SF: { label: 'Small Forward', group: 'wing', attrs: ['Three Point','Finishing','Athleticism','Perimeter Defense','Rebounding','Ball Handling'], h: 79, w: 215 },
-        PF: { label: 'Power Forward', group: 'big', attrs: ['Post Scoring','Rebounding','Mid Range','Strength','Post Defense','Athleticism'], h: 81, w: 235 },
-        C:  { label: 'Center', group: 'big', attrs: ['Post Scoring','Rebounding','Post Defense','Shot Blocking','Strength','Finishing'], h: 83, w: 250 },
+        PG: { label: 'Point Guard', group: 'guard', attrs: ['Ball Handling','Passing','Three Point','Speed','Perimeter Defense','Vision','Finishing','Mid Range','Rebounding','Post Scoring','Post Defense','Shot Blocking','Strength','Athleticism'], h: 74, w: 180 },
+        SG: { label: 'Shooting Guard', group: 'guard', attrs: ['Three Point','Mid Range','Finishing','Speed','Perimeter Defense','Ball Handling','Passing','Vision','Rebounding','Post Scoring','Post Defense','Shot Blocking','Strength','Athleticism'], h: 77, w: 195 },
+        SF: { label: 'Small Forward', group: 'wing', attrs: ['Three Point','Finishing','Athleticism','Perimeter Defense','Rebounding','Ball Handling','Passing','Speed','Vision','Mid Range','Post Scoring','Post Defense','Shot Blocking','Strength'], h: 79, w: 215 },
+        PF: { label: 'Power Forward', group: 'big', attrs: ['Post Scoring','Rebounding','Mid Range','Strength','Post Defense','Athleticism','Three Point','Finishing','Shot Blocking','Ball Handling','Passing','Speed','Perimeter Defense','Vision'], h: 81, w: 235 },
+        C:  { label: 'Center', group: 'big', attrs: ['Post Scoring','Rebounding','Post Defense','Shot Blocking','Strength','Finishing','Three Point','Mid Range','Athleticism','Ball Handling','Passing','Speed','Perimeter Defense','Vision'], h: 83, w: 250 },
     },
     baseball: {
         SP: { label: 'Starting Pitcher', group: 'pitcher', attrs: ['Velocity','Control','Movement','Stamina','Mental Game','Fielding'], h: 74, w: 210 },
@@ -281,6 +281,14 @@ const CAREER_TIERS = {
     roleplayer: { label: 'Role Player',     desc: 'A key piece off the bench or a specialist starter.',         perfCap: 61,  awardBias: 2.20, statMult: 0.58 },
     benchwarmer:{ label: 'Bench Warmer',    desc: 'Just happy to be here. Every good game is a victory.',       perfCap: 50,  awardBias: 3.50, statMult: 0.45 },
 };
+const TIER_OVERALL_CAPS = {
+    goat:       99,
+    allstar:    93,
+    star:       86,
+    starter:    78,
+    roleplayer: 70,
+    benchwarmer:62,
+};
 const DEFAULT_TIER = 'star';
 
 
@@ -329,7 +337,21 @@ function withSaveSuspended(fn) {
     try { fn(); } finally { _suspendSave = false; saveState(); }
 }
 function getCareers(sport) { return STATE.careers[sport]; }
-function getCareer(sport, id) { return STATE.careers[sport].find(c => c.id === id); }
+function getCareer(sport, id) {
+    const career = STATE.careers[sport].find(c => c.id === id);
+    if (!career) return career;
+    // Patch missing basketball attributes for old saves
+    if (career.sport === 'basketball' && career.position) {
+        const allAttrs = roleAttrs('basketball', career.position);
+        allAttrs.forEach(a => {
+            if (career.attributes[a] === undefined) {
+                career.attributes[a] = 40;
+            }
+        });
+        career.overall = computeOverall(career.attributes);
+    }
+    return career;
+}
 function deleteCareer(sport, id) {
     STATE.careers[sport] = STATE.careers[sport].filter(c => c.id !== id);
     saveState();
@@ -346,12 +368,21 @@ const ATTR_MIN = 25, ATTR_MAX = 99;
 function generateStartingAttributes(sport, posKey, heightIn, weightLb) {
     const attrs = roleAttrs(sport, posKey);
     const base = {};
-    let raw = attrs.map(() => randInt(58, 68));
+
+    // For basketball, only the first 6 are "primary" — extras start lower
+    // so they don't drag down the overall unfairly
+    const primaryCount = (sport === 'basketball') ? 6 : attrs.length;
+    const primaryAttrs = attrs.slice(0, primaryCount);
+    const extraAttrs = attrs.slice(primaryCount);
+
+    let raw = primaryAttrs.map(() => randInt(58, 68));
     const avg = raw.reduce((a, b) => a + b, 0) / raw.length;
     const diff = START_OVERALL_TARGET - avg;
     raw = raw.map(v => clamp(Math.round(v + diff), 45, 75));
-    attrs.forEach((a, i) => base[a] = raw[i]);
+    primaryAttrs.forEach((a, i) => base[a] = raw[i]);
 
+    // Extra attributes start at 40 — cheap to upgrade but don't inflate overall
+    extraAttrs.forEach(a => base[a] = 40);
 
     const info = posInfo(sport, posKey);
     const heightDelta = (heightIn - info.h) / info.h;
@@ -360,7 +391,6 @@ function generateStartingAttributes(sport, posKey, heightIn, weightLb) {
     const speedAttr = findHintAttr(attrs, SPEED_ATTR_HINTS);
     if (powerAttr) base[powerAttr] = clamp(base[powerAttr] + clamp(Math.round(weightDelta * 22), -9, 9), ATTR_MIN, ATTR_MAX);
     if (speedAttr) base[speedAttr] = clamp(base[speedAttr] + clamp(Math.round(-weightDelta * 14 - heightDelta * 6), -9, 9), ATTR_MIN, ATTR_MAX);
-
 
     return base;
 }
@@ -382,7 +412,11 @@ function canUpgrade(career, attrName) {
     if (isInDecline(career)) return false;
     const val = career.attributes[attrName];
     if (val >= ATTR_MAX) return false;
-    return career.skillPoints >= upgradeCost(val);
+    if (career.skillPoints < upgradeCost(val)) return false;
+    // Tier-based overall cap: can't push the overall above the tier ceiling
+    const cap = TIER_OVERALL_CAPS[career.tier || DEFAULT_TIER] ?? 99;
+    if (career.overall >= cap) return false;
+    return true;
 }
 function upgradeAttribute(career, attrName) {
     if (!canUpgrade(career, attrName)) return false;
@@ -507,11 +541,11 @@ const SKIN_TONES = ['#3A2618', '#5C3A21', '#8A5A36', '#C68B59', '#E0AC76', '#F2D
   Your files: Buzz-Black, Short-Brown, Long-Curly-Light-Brown, etc.
   ---------------------------------------------------------------- */
 const HAIR_COLORS = [
-   { name: 'Black',       hex: '#0B0B0B' },
-   { name: 'Brown',       hex: '#2C1B10' },
-   { name: 'Light-Brown', hex: '#8C6239' },
-   { name: 'Blonde',      hex: '#C9A05C' },
-   { name: 'Ginger',      hex: '#B23A3A' },
+    { name: 'Black',       hex: '#0B0B0B' },
+    { name: 'Brown',       hex: '#2C1B10' },
+    { name: 'Light-Brown', hex: '#8C6239' },
+    { name: 'Blonde',      hex: '#C9A05C' },
+    { name: 'Ginger',      hex: '#B23A3A' },
 ];
 
 
@@ -522,13 +556,13 @@ const HAIR_COLORS = [
   'bald' has no image — we just render nothing.
   -------------------------------------------------------------------- */
 const HAIR_STYLES = [
-   'bald',
-   'Buzz',
-   'Short',
-   'Curly',
-   'Long-Curly',
-   'Long-Straight',
-   'Long-Wavy',
+    'bald',
+    'Buzz',
+    'Short',
+    'Curly',
+    'Long-Curly',
+    'Long-Straight',
+    'Long-Wavy',
 ];
 
 
@@ -536,16 +570,16 @@ const HAIR_STYLES = [
 
 /* Returns a display label for the style chip buttons */
 function hairStyleLabel(style) {
-   const labels = {
-       'bald':         'Bald',
-       'Buzz':         'Buzz',
-       'Short':        'Short',
-       'Curly':        'Curly',
-       'Long-Curly':   'Long Curly',
-       'Long-Straight':'Long Straight',
-       'Long-Wavy':    'Long Wavy',
-   };
-   return labels[style] || style;
+    const labels = {
+        'bald':         'Bald',
+        'Buzz':         'Buzz',
+        'Short':        'Short',
+        'Curly':        'Curly',
+        'Long-Curly':   'Long Curly',
+        'Long-Straight':'Long Straight',
+        'Long-Wavy':    'Long Wavy',
+    };
+    return labels[style] || style;
 }
 
 
@@ -561,21 +595,21 @@ function hairStyleLabel(style) {
   (transparent background, head centred) line up with the face circle below.
   Tweak x/y/width/height here if any style needs repositioning. */
 function hairImageTag(style, colorName) {
-   if (!style || style === 'bald') return '';
+    if (!style || style === 'bald') return '';
 
 
 
 
-   /* colorName may arrive as a plain string (legacy saves) or already correct.
-      Map any old hex values that might be stored to the closest named color. */
-   const resolvedColor = resolveHairColorName(colorName);
+    /* colorName may arrive as a plain string (legacy saves) or already correct.
+       Map any old hex values that might be stored to the closest named color. */
+    const resolvedColor = resolveHairColorName(colorName);
 
 
 
 
-   const filename = `${style}-${resolvedColor}`;
-   /* Path is just the filename — images sit in the same folder as index.html */
-   return `<image href="${filename}.png"
+    const filename = `${style}-${resolvedColor}`;
+    /* Path is just the filename — images sit in the same folder as index.html */
+    return `<image href="${filename}.png"
        x="0" y="0" width="208" height="220"
        preserveAspectRatio="xMidYMid meet"
        style="pointer-events:none"/>`;
@@ -587,17 +621,17 @@ function hairImageTag(style, colorName) {
 /* Resolves a stored color value to a valid color name.
   Handles: { name, hex } objects, plain name strings, and legacy hex strings. */
 function resolveHairColorName(colorVal) {
-   if (!colorVal) return 'Black';
-   // Already an object with a name property
-   if (typeof colorVal === 'object' && colorVal.name) return colorVal.name;
-   // Plain string that matches a known name
-   const byName = HAIR_COLORS.find(c => c.name === colorVal);
-   if (byName) return byName.name;
-   // Legacy: stored as hex — map to closest named color
-   const byHex = HAIR_COLORS.find(c => c.hex === colorVal);
-   if (byHex) return byHex.name;
-   // Fallback
-   return 'Black';
+    if (!colorVal) return 'Black';
+    // Already an object with a name property
+    if (typeof colorVal === 'object' && colorVal.name) return colorVal.name;
+    // Plain string that matches a known name
+    const byName = HAIR_COLORS.find(c => c.name === colorVal);
+    if (byName) return byName.name;
+    // Legacy: stored as hex — map to closest named color
+    const byHex = HAIR_COLORS.find(c => c.hex === colorVal);
+    if (byHex) return byHex.name;
+    // Fallback
+    return 'Black';
 }
 
 
@@ -605,34 +639,34 @@ function resolveHairColorName(colorVal) {
 
 /* Returns the hex for swatch rendering from whatever format colorVal is in */
 function resolveHairColorHex(colorVal) {
-   if (!colorVal) return HAIR_COLORS[0].hex;
-   if (typeof colorVal === 'object' && colorVal.hex) return colorVal.hex;
-   const byName = HAIR_COLORS.find(c => c.name === colorVal);
-   if (byName) return byName.hex;
-   const byHex = HAIR_COLORS.find(c => c.hex === colorVal);
-   if (byHex) return byHex.hex;
-   return colorVal; // pass through if already a hex
+    if (!colorVal) return HAIR_COLORS[0].hex;
+    if (typeof colorVal === 'object' && colorVal.hex) return colorVal.hex;
+    const byName = HAIR_COLORS.find(c => c.name === colorVal);
+    if (byName) return byName.hex;
+    const byHex = HAIR_COLORS.find(c => c.hex === colorVal);
+    if (byHex) return byHex.hex;
+    return colorVal; // pass through if already a hex
 }
 
 
 
 
 function buildAvatarSVG(opts) {
-   const { skinTone, hairStyle, hairColor, jerseyColor, number, heightIn, weightLb } = opts;
-   const bmi = weightLb / (heightIn * heightIn) * 703;
-   const frameScale = clamp(0.86 + (bmi - 21) / 38, 0.84, 1.22).toFixed(3);
-   const numStr = (number === '' || number === null || number === undefined) ? '' : String(number);
+    const { skinTone, hairStyle, hairColor, jerseyColor, number, heightIn, weightLb } = opts;
+    const bmi = weightLb / (heightIn * heightIn) * 703;
+    const frameScale = clamp(0.86 + (bmi - 21) / 38, 0.84, 1.22).toFixed(3);
+    const numStr = (number === '' || number === null || number === undefined) ? '' : String(number);
 
 
 
 
-   /* Resolve the color name for the image filename */
-   const colorName = resolveHairColorName(hairColor);
+    /* Resolve the color name for the image filename */
+    const colorName = resolveHairColorName(hairColor);
 
 
 
 
-   return `<svg viewBox="0 0 208 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="player avatar">
+    return `<svg viewBox="0 0 208 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="player avatar">
    <defs>
      <clipPath id="frameClip"><rect x="0" y="0" width="208" height="220" rx="20"/></clipPath>
    </defs>
@@ -653,47 +687,47 @@ function buildAvatarSVG(opts) {
  </svg>`;
 }
 function hairImageTag(style, colorName) {
-   if (!style || style === 'bald') return '';
+    if (!style || style === 'bald') return '';
 
 
 
 
-   const resolvedColor = resolveHairColorName(colorName);
-   const filename = `${style}-${resolvedColor}`;
+    const resolvedColor = resolveHairColorName(colorName);
+    const filename = `${style}-${resolvedColor}`;
 
 
 
 
-   // Default values (what you currently have)
-   let imgX = 0;
-   let imgY = 0;
-   let imgWidth = 208;
-   let imgHeight = 220;
+    // Default values (what you currently have)
+    let imgX = 0;
+    let imgY = 0;
+    let imgWidth = 208;
+    let imgHeight = 220;
 
 
 
 
-   // --- Tweak these to nudge the hair into place ---
-   // Example: Sliding the hair down by 15px and scaling it up slightly
-   imgY = -10;        // Positive numbers push the image down
-   imgX = -11;       // Negative numbers push the image left to keep it centered
-   imgWidth = 228;   // Increased width to scale it up
-   imgHeight = 230;  // Increased height to scale it up
+    // --- Tweak these to nudge the hair into place ---
+    // Example: Sliding the hair down by 15px and scaling it up slightly
+    imgY = -10;        // Positive numbers push the image down
+    imgX = -11;       // Negative numbers push the image left to keep it centered
+    imgWidth = 228;   // Increased width to scale it up
+    imgHeight = 230;  // Increased height to scale it up
 
 
 
 
-   /* // OPTIONAL: If different styles need different tweaks, use a switch statement:
-   if (style === 'Short') {
-       imgY = 18;
-   }
-   }
-   */
+    /* // OPTIONAL: If different styles need different tweaks, use a switch statement:
+    if (style === 'Short') {
+        imgY = 18;
+    }
+    }
+    */
 
 
 
 
-   return `<image href="${filename}.png"
+    return `<image href="${filename}.png"
        x="${imgX}" y="${imgY}" width="${imgWidth}" height="${imgHeight}"
        preserveAspectRatio="xMidYMid meet"
        style="pointer-events:none"/>`;
@@ -748,7 +782,23 @@ function newStatTotals(sport, posKey) {
 function addStatTotals(totals, line) {
     Object.keys(line).forEach(k => { totals[k] = (totals[k] || 0) + line[k]; });
 }
-
+function updateCareerHighs(career, line) {
+    const sport = career.sport;
+    if (!career.careerHighs) career.careerHighs = {};
+    const ch = career.careerHighs;
+    const fields = statFieldsFor(sport, career.position || 'GEN');
+    // Golf: lower is better for stroke categories
+    const lowerIsBetter = new Set(['strokesTotal', 'relToPar']);
+    fields.forEach(([k]) => {
+        const val = line[k];
+        if (val === undefined || val === null) return;
+        if (lowerIsBetter.has(k)) {
+            if (ch[k] === undefined || val < ch[k]) ch[k] = val;
+        } else {
+            if (ch[k] === undefined || val > ch[k]) ch[k] = val;
+        }
+    });
+}
 
 /* ----------------------------------------------------------------------
    7. GAME STATLINE GENERATION
@@ -765,7 +815,9 @@ function generateFootballLine(posKey, perf) {
             const attempts = completions + r(4, 10);
             const passYds = clamp(Math.round(completions * (6 + p * 6)) + r(-15, 25), 0, 480);
             const passTD = p > 0.82 ? r(2, 4) : p > 0.6 ? r(1, 3) : r(0, 1);
-            const ints = p < 0.35 ? r(1, 3) : p < 0.65 ? (Math.random() < 0.35 ? 1 : 0) : 0;
+            // Realistic INT rates: good QBs throw ~1 INT per 30–40 attempts; bad QBs 1 per 15
+            const intChance = p > 0.82 ? 0.08 : p > 0.65 ? 0.18 : p > 0.45 ? 0.30 : 0.45;
+            const ints = (Math.random() < intChance) ? 1 : (p < 0.40 && Math.random() < 0.25 ? 1 : 0);
             const rushYds = clamp(r(-3, 10) + Math.round(p * 15), -5, 90);
             return { gp: 1, completions, attempts, passYds, passTD, ints, rushYds };
         }
@@ -818,47 +870,109 @@ function generateFootballLine(posKey, perf) {
         }
     }
 }
-function generateBasketballLine(posKey, perf) {
+function generateBasketballLine(posKey, perf, career) {
     const group = posInfo('basketball', posKey).group;
     const p = perf / 100;
     const isBig = group === 'big';
     const isGuard = group === 'guard';
     const isWing = group === 'wing';
+    const isPG = posKey === 'PG';
+    const isC = posKey === 'C';
+    const isPF = posKey === 'PF';
 
+    // Get tier for scaling
+    const tierKey = (career && career.tier) ? career.tier : DEFAULT_TIER;
+    const tier = CAREER_TIERS[tierKey] || CAREER_TIERS[DEFAULT_TIER];
+    const statMult = tier.statMult || 1.0;
 
-    /* Occasional blowup game (10% chance) or stinker (10% chance) for realism */
-    const gameModifier = Math.random() < 0.10 ? 1.35 : (Math.random() < 0.10 ? 0.55 : 1.0);
+    // Prime/age modifier — players peak between 26–32
+    let primeMult = 1.0;
+    if (career && career.age) {
+        const age = career.age;
+        if (age >= 26 && age <= 32) primeMult = 1.0;
+        else if (age >= 22 && age < 26) primeMult = 0.82 + (age - 22) * 0.05;   // building
+        else if (age >= 19 && age < 22) primeMult = 0.68 + (age - 19) * 0.05;   // rookie years
+        else if (age > 32 && age <= 36) primeMult = 1.0 - (age - 32) * 0.05;
+        else if (age > 36) primeMult = 0.78 - (age - 36) * 0.04;
+        else primeMult = 0.65;
+        primeMult = clamp(primeMult, 0.45, 1.0);
+    }
 
+    const effective = p * statMult * primeMult;
 
-    /* FGA scales with role — guards shoot more than bigs */
-    const baseFGA = isBig ? r(6, 11) : (isGuard ? r(8, 15) : r(7, 13));
-    const fga = clamp(Math.round((baseFGA + p * 6) * gameModifier), 1, 30);
+    /* Occasional blowup (10%) or stinker (10%) */
+    const gameRoll = Math.random();
+    const gameModifier = gameRoll < 0.10 ? 1.35 : (gameRoll < 0.20 ? 0.60 : 1.0);
 
+    /* FGA — guards shoot more volume */
+    const baseFGA = isBig ? r(6, 10) : (isGuard ? r(8, 14) : r(7, 12));
+    const fga = clamp(Math.round((baseFGA + effective * 6) * gameModifier), 1, 28);
 
-    /* FG% is position-realistic: guards .40-.48 elite, bigs .48-.58 elite */
-    const fgPctBase = isBig ? (0.42 + p * 0.14) : (0.36 + p * 0.12);
+    /* FG% — bigs shoot higher % (layups/dunks), guards lower */
+    const fgPctBase = isBig ? (0.44 + effective * 0.14) : (0.38 + effective * 0.11);
     const fgPct = clamp(fgPctBase, 0.28, isBig ? 0.62 : 0.52);
     const fgm = clamp(Math.round(fga * fgPct), 0, fga);
 
-
-    /* 3-point attempts tracked separately */
-    const tpaBase = isBig ? (Math.random() < 0.18 ? 1 : 0) : (isGuard ? clamp(r(2, 5) + Math.round(p * 3), 0, 10) : clamp(r(1, 3) + Math.round(p * 2), 0, 7));
+    /* 3-point shots — guards shoot many, wings some, bigs very few
+       Key fix: 3P% for a 99-rated player should be ~40-43%, not 35% */
+    let tpaBase, tp3Pct;
+    if (isBig) {
+        // Centers rarely shoot threes; PFs occasionally
+        tpaBase = isPF ? (Math.random() < 0.3 ? r(1, 2) : 0) : (Math.random() < 0.1 ? 1 : 0);
+        tp3Pct = clamp(0.28 + effective * 0.12, 0.20, 0.38);
+    } else if (isGuard) {
+        tpaBase = clamp(r(3, 6) + Math.round(effective * 4), 0, 12);
+        // Fixed: 99-rated guard should shoot ~40-43% from three
+        tp3Pct = clamp(0.30 + effective * 0.145, 0.24, 0.44);
+    } else {
+        // Wings (SF)
+        tpaBase = clamp(r(2, 5) + Math.round(effective * 3), 0, 9);
+        tp3Pct = clamp(0.30 + effective * 0.135, 0.24, 0.43);
+    }
     const tpa = clamp(Math.round(tpaBase * gameModifier), 0, 12);
-    const tp3Pct = clamp(0.28 + p * 0.12, 0.22, 0.43);
     const tpm = clamp(Math.round(tpa * tp3Pct), 0, tpa);
 
+    /* FT */
+    const ftMade = clamp(Math.round((effective * 4 + r(0, 2)) * gameModifier), 0, 12);
 
-    /* Points from FG + FT (rough) — NOT simply fgm*2+tpm to avoid double counting */
-    const ftMade = clamp(Math.round((p * 3.5 + r(0, 2)) * gameModifier), 0, 12);
-    /* Pts = (fgm - tpm)*2 + tpm*3 + ftMade, but bounded for realism */
+    /* Points */
     const rawPts = (fgm - tpm) * 2 + tpm * 3 + ftMade;
-    const pts = clamp(rawPts, 0, 52);
+    const pts = clamp(rawPts, 0, 55);
 
+    /* Rebounds — POSITION REALISTIC
+       A 6'0 PG with 99 rebounding shouldn't get 13+ rpg.
+       Position caps: PG ~5 max, SG ~5 max, SF ~9 max, PF ~13 max, C ~16 max */
+    let rebBase, rebMax;
+    if (isC) { rebBase = r(3, 7) + effective * 9; rebMax = 22; }
+    else if (isPF) { rebBase = r(3, 6) + effective * 7; rebMax = 17; }
+    else if (isWing) { rebBase = r(1, 3) + effective * 4.5; rebMax = 10; }
+    else if (posKey === 'SG') { rebBase = r(1, 2) + effective * 2.5; rebMax = 6; }
+    else { /* PG */ rebBase = r(1, 2) + effective * 2; rebMax = 6; }
+    const reb = clamp(Math.round(rebBase * (gameModifier > 1 ? 1.15 : 1.0)), 0, rebMax);
 
-    const reb = clamp(Math.round((r(1, isBig ? 6 : 2) + p * (isBig ? 9 : isGuard ? 3 : 5)) * (gameModifier > 1 ? 1.1 : 1)), 0, 24);
-    const ast = clamp(Math.round((r(0, isGuard ? 5 : 2) + p * (isGuard ? 7 : 3)) * (gameModifier > 1 ? 1.1 : 1)), 0, 16);
-    const stl = clamp(r(0, 2) + (Math.random() < p * 0.5 ? 1 : 0), 0, 5);
-    const blk = clamp((isBig ? r(0, 2) : 0) + (Math.random() < p * 0.25 ? 1 : 0), 0, 7);
+    /* Assists — POSITION REALISTIC
+       A center with 99 passing shouldn't average 10 ast/game.
+       Caps: PG ~14 max, SG ~7 max, SF ~6 max, PF ~4 max, C ~4 max */
+    let astBase, astMax;
+    if (isPG) { astBase = r(1, 5) + effective * 7; astMax = 15; }
+    else if (posKey === 'SG') { astBase = r(0, 3) + effective * 3; astMax = 8; }
+    else if (isWing) { astBase = r(0, 2) + effective * 2.5; astMax = 7; }
+    else { /* bigs */ astBase = r(0, 1) + effective * 1.5; astMax = 4; }
+    const ast = clamp(Math.round(astBase * (gameModifier > 1 ? 1.1 : 1.0)), 0, astMax);
+
+    /* Steals — guards steal more */
+    const stl = clamp(r(0, 2) + (Math.random() < effective * 0.55 ? 1 : 0), 0, 5);
+
+    /* Blocks — POSITION REALISTIC
+       SF fix: should get occasional blocks, not zero.
+       Caps: C ~6, PF ~4, SF ~2, SG ~1, PG ~1 */
+    let blkBase, blkMax;
+    if (isC) { blkBase = r(0, 2) + effective * 2.5; blkMax = 8; }
+    else if (isPF) { blkBase = r(0, 1) + effective * 1.2; blkMax = 4; }
+    else if (isWing) { blkBase = Math.random() < (0.15 + effective * 0.35) ? 1 : 0; blkMax = 3; }
+    else { blkBase = Math.random() < (0.08 + effective * 0.15) ? 1 : 0; blkMax = 2; }
+    const blk = clamp(Math.round(blkBase * (gameModifier > 1 ? 1.1 : 1.0)), 0, blkMax);
+
     return { gp: 1, pts, reb, ast, stl, blk, fgm, fga, tpm, tpa };
 }
 function generateBaseballLine(posKey, perf) {
@@ -940,12 +1054,12 @@ function generateLeague(sport) {
         teams = REAL_LEAGUES[sport].map((t, i) => {
             return {
                 id: 'T' + i,
-                name: `${t.city} ${t.mascot}`, 
-                city: t.city, 
+                name: `${t.city} ${t.mascot}`,
+                city: t.city,
                 mascot: t.mascot,
                 conference: t.conf,
                 division: t.div,
-                rating: clamp(Math.round(randNormal(76, 10)), 52, 97),
+                rating: clamp(Math.round(randNormal(74, 9)), 55, 97),
                 wins: 0, losses: 0, ties: 0,
                 pf: 0, pa: 0,
                 streak: 0,
@@ -1010,7 +1124,7 @@ function teamById(league, id) { return league.teams.find(t => t.id === id); }
 
 function homeFieldEdge() { return 2.2; }
 function winProbability(ratingA, ratingB) {
-    return 1 / (1 + Math.pow(10, -(ratingA - ratingB) / 14));
+    return 1 / (1 + Math.pow(10, -(ratingA - ratingB) / 11));
 }
 function generateScore(sport, winnerRating, loserRating) {
     const gap = clamp((winnerRating - loserRating) / 4, 0, 10);
@@ -1233,7 +1347,7 @@ function isFullyMaxed(career) {
 function genStatline(career, perf) {
     const sport = career.sport, pos = career.position || 'GEN';
     if (sport === 'football') return generateFootballLine(pos, perf);
-    if (sport === 'basketball') return generateBasketballLine(pos, perf);
+    if (sport === 'basketball') return generateBasketballLine(pos, perf, career); // ← pass career
     if (sport === 'baseball') return generateBaseballLine(pos, perf);
 }
 function statlineSummary(sport, posKey, line) {
@@ -1266,7 +1380,7 @@ function simulateHighSchoolGame(career) {
     let line = null, summary = '';
     if (career.sport === 'bowling') { const res = simulateBowlingEvent(career); line = res; summary = `Avg ${res.avg.toFixed(1)}, high game ${res.highGame}`; }
     else if (career.sport === 'golf') { const res = simulateGolfEvent(career); line = res; summary = `${res.strokesTotal} strokes (${res.relToPar >= 0 ? '+' : ''}${res.relToPar})`; }
-    else { line = genStatline(career, perf); addStatTotals(career.seasonStats, line); summary = statlineSummary(career.sport, career.position, line); }
+    else { line = genStatline(career, perf); addStatTotals(career.seasonStats, line); updateCareerHighs(career, line); summary = statlineSummary(career.sport, career.position, line); }
     const entry = { type: 'highschool', label: `${career.highSchool.name} vs ${opponent}`, opponent, won, summary, perf, t: Date.now() };
     career.highSchool.games.push(entry);
     career.highSchool.gamesPlayed++;
@@ -1308,7 +1422,7 @@ function simulateCollegeGame(career) {
     let line = null, summary = '';
     if (career.sport === 'bowling') { const res = simulateBowlingEvent(career); line = res; summary = `Avg ${res.avg.toFixed(1)}, high game ${res.highGame}`; }
     else if (career.sport === 'golf') { const res = simulateGolfEvent(career); line = res; summary = `${res.strokesTotal} strokes (${res.relToPar >= 0 ? '+' : ''}${res.relToPar})`; }
-    else { line = genStatline(career, perf); addStatTotals(career.seasonStats, line); summary = statlineSummary(career.sport, career.position, line); }
+    else { line = genStatline(career, perf); addStatTotals(career.seasonStats, line); updateCareerHighs(career, line); summary = statlineSummary(career.sport, career.position, line); }
     const entry = { type: 'college', label: `${career.college.name} vs ${opponent}`, opponent, won, summary, perf, t: Date.now() };
     career.college.games.push(entry);
     career.college.gamesPlayed++;
@@ -1373,14 +1487,14 @@ function runDraftBaseball(career) {
     else if (ov >= 73) round = randInt(4, 6);
     else if (ov >= 67) round = randInt(7, 12);
     else round = randInt(13, 20);
-    
+
     const pickNum = randInt(1, 30);
     const league = generateLeague('baseball');
     const team = weightedRandom(t => 1 / (t.rating + 1), league.teams);
-    
+
     // Pick a real minor league affiliate
     const minorAffiliate = pick(REAL_MILB_TEAMS);
-    
+
     career.draft = { round, pick: pickNum, teamName: team.name };
     archiveSeason(career, 'college', career.college.name);
     career.proLeague = league;
@@ -1390,7 +1504,7 @@ function runDraftBaseball(career) {
     career.stage = 'minors';
     career.season = 1;
     career.seasonGameCount = 0;
-    
+
     logHistory(career, `Drafted in Round ${round}, Pick ${pickNum} by the ${team.name}. Reporting to ${career.minors.affiliateName}.`);
     saveState();
     return career.draft;
@@ -1404,6 +1518,7 @@ function simulateMinorsGame(career) {
     const won = Math.random() < clamp(0.45 + perf / 260, 0.3, 0.85);
     const line = generateBaseballLine(career.position, perf);
     addStatTotals(career.seasonStats, line);
+    updateCareerHighs(career, line);
     const summary = statlineSummary('baseball', career.position, line);
     const entry = { type: 'minors', label: `${career.minors.affiliateName} vs ${opponent}`, opponent, won, summary, perf, t: Date.now() };
     career.minors.games.push(entry);
@@ -1433,18 +1548,25 @@ function callUpToMajors(career) {
 
 
 function declareTurnPro(career) {
+    /* Guard: only archive college once */
     try {
-        archiveSeason(career, 'college', career.college.name);
-    } catch(e) { /* college may already be archived on retry */ }
-    /* Ensure all fields expected by the tour engine exist */
-    career.tour = { rivals: generateRivals(career.sport), schedule: generateTourSchedule(career.sport), eventIndex: 0 };
+        if (career.college && !career.careerStatsLog.some(s => s.label === career.college.name)) {
+            archiveSeason(career, 'college', career.college.name);
+        }
+    } catch(e) { /* safe to ignore */ }
+
+    career.tour = {
+        rivals: generateRivals(career.sport),
+        schedule: generateTourSchedule(career.sport),
+        eventIndex: 0,
+    };
     career.seasonStats = newStatTotals(career.sport, 'GEN');
     career.stage = 'tour';
     career.season = 1;
     career.seasonGameCount = 0;
-    career.seasonPerfSum = 0; career.seasonPerfGames = 0;
+    career.seasonPerfSum = 0;
+    career.seasonPerfGames = 0;
     career.priorSeasonGrade = null;
-    /* Ensure trade stub always exists — tour sports don't use it but the field must be present */
     career.trade = { lastRequestGameCount: -999 };
     career.age = AGE_MILESTONES[career.sport].proStart;
     career.retirementAge = rollRetirementAge(career.sport);
@@ -1463,6 +1585,7 @@ function simulateProGame(career) {
     if (!result) return null;
     const line = genStatline(career, result.perf);
     addStatTotals(career.seasonStats, line);
+    updateCareerHighs(career, line);
     const summary = statlineSummary(career.sport, career.position, line);
     const opp = teamById(league, result.opponentId);
     const myTeam = teamById(league, career.team);
@@ -1722,19 +1845,15 @@ function finalizeSeasonAwards(career, playoffResult) {
     /* Playoff awards */
     if (playoffResult && playoffResult.madePlayoffs) {
         if (playoffResult.wonIt) {
-            /* Football: Super Bowl MVP (no conference MVP) */
             if (sport === 'football') {
                 const bestOnTeam = wasBestOnOwnTeam(career);
                 if (bestOnTeam) items.push({ key: 'superBowlMvp', label: labels.superBowlMvp || 'Super Bowl MVP', won: true, rank: 1, total: 1 });
             } else {
-                /* Basketball/Baseball: Finals MVP */
-                if (playoffResult.wonConference) {
-                    const bestOnTeam = wasBestOnOwnTeam(career);
-                    if (bestOnTeam) items.push({ key: 'finalsMvp', label: 'Finals MVP', won: true, rank: 1, total: 1 });
-                }
+                // Finals MVP: won the title — were you the best player?
+                const bestOnTeam = wasBestOnOwnTeam(career);
+                if (bestOnTeam) items.push({ key: 'finalsMvp', label: 'Finals MVP', won: true, rank: 1, total: 1 });
             }
         } else if (playoffResult.wonConference && sport !== 'football') {
-            /* Conference Finals MVP only for non-football */
             const bestOnTeam = wasBestOnOwnTeam(career);
             if (bestOnTeam) items.push({ key: 'confFinalsMvp', label: 'Conference Finals MVP', won: true, rank: 1, total: 1 });
         }
@@ -1804,7 +1923,7 @@ function startNewProSeason(career) {
     archiveSeason(career, 'pro', `${team.name} (Season ${career.season})`);
     league.teams.forEach(t => {
         t.wins = 0; t.losses = 0; t.ties = 0; t.pf = 0; t.pa = 0; t.streak = 0;
-        t.rating = clamp(t.rating + randInt(-4, 4), 60, 99);
+        t.rating = clamp(t.rating + randInt(-3, 3), 58, 97);
     });
     league.schedule = buildSeasonSchedule(league.teams.map(t => t.id), LEAGUE_SHAPE[career.sport].games);
     league.week = 0; league.complete = false; league.playoffResult = null;
@@ -2689,7 +2808,10 @@ function renderAttributesTab(career) {
     const declineBanner = declining ? `<div class="declineBanner">
       <strong>Father Time has arrived.</strong> At age ${career.age}, skill points can no longer raise these attributes — Conditioning is the only thing still slowing the decline. Attributes will keep eroding each season until you retire (mandatory by age ${career.retirementAge}).
     </div>` : '';
-
+    const tierCap = TIER_OVERALL_CAPS[career.tier || DEFAULT_TIER] ?? 99;
+    const capNote = career.overall >= tierCap
+        ? ` Your <strong>${CAREER_TIERS[career.tier || DEFAULT_TIER].label}</strong> career path caps your overall at <strong>${tierCap}</strong> — attributes are locked at their current ceiling.`
+        : ` Your <strong>${CAREER_TIERS[career.tier || DEFAULT_TIER].label}</strong> path caps overall at <strong>${tierCap}</strong>.`;
 
     return `
     <div class="ovrBanner">
@@ -2700,7 +2822,7 @@ function renderAttributesTab(career) {
       </div>
     </div>
     ${declineBanner}
-    <p class="formSection__hint">Spend skill points earned from simulating games to push individual attributes from 65 toward a max of 99. Costs rise as attributes get elite${rules ? `, and upgrades lock entirely once decline sets in around age ${rules.declineStart}` : ''}.</p>
+    <p class="formSection__hint">Spend skill points earned from simulating games to push individual attributes from 65 toward a max of 99. Costs rise as attributes get elite${rules ? `, and upgrades lock entirely once decline sets in around age ${rules.declineStart}` : ''}.${capNote}</p>
     <div class="attrList">${rows}</div>
     ${renderConditioningSection(career)}
     ${renderBadgesSection(career)}
@@ -3032,6 +3154,29 @@ function formatStatVal(key, val) {
 }
 const STAT_AGGREGATE_MAX = { highGame: true };
 
+function careerHighsHTML(career) {
+    if (!career.careerHighs || !Object.keys(career.careerHighs).length) return '';
+    const sport = career.sport;
+    const pos = career.position || 'GEN';
+    const fields = statFieldsFor(sport, pos);
+    const ch = career.careerHighs;
+    const lowerIsBetter = new Set(['strokesTotal', 'relToPar']);
+    const rows = fields
+        .filter(([k]) => ch[k] !== undefined && k !== 'gp')
+        .map(([k, label]) => {
+            const note = lowerIsBetter.has(k) ? ' (lowest)' : '';
+            return `<div class="gameLogRow">
+        <div class="gameLogRow__main">
+          <span class="gameLogRow__label">${label}${note}</span>
+          <span class="gameLogRow__summary">${formatStatVal(k, ch[k])}</span>
+        </div>
+      </div>`;
+        }).join('');
+    return `<section class="block">
+    <h2 class="block__title">Career Highs</h2>
+    <div class="gameLogList">${rows}</div>
+  </section>`;
+}
 
 function renderStatsTab(career) {
     const sport = career.sport, pos = career.position || 'GEN';
@@ -3074,13 +3219,13 @@ function renderStatsTab(career) {
     </tbody>
   </table></div>`;
 
-
     return `
     <section class="block">
       <h2 class="block__title">Stat Log</h2>
       <p class="formSection__hint">${sport === 'bowling' ? 'Tracked PBC-style: tournament average, titles, and tour points.' : sport === 'golf' ? 'Tracked PGC-style: scoring average, cuts made, and tour points.' : 'Season-by-season totals across your whole career.'}</p>
       ${table}
     </section>
+    ${careerHighsHTML(career)}
   `;
 }
 
@@ -3457,8 +3602,30 @@ function handleAction(action, btn) {
             return;
         }
         case 'start-new-pro-season': { const c = currentCareerFromRoute(); startNewProSeason(c); rerenderCurrentRoute(); toast(`Season ${c.season} underway!`, 'success'); return; }
-        case 'retire-career': { const c = currentCareerFromRoute(); retireCareer(c); openModal(retirementModalHTML(c)); return; }
-        case 'extend-career': { const c = currentCareerFromRoute(); extendCareer(c); rerenderCurrentRoute(); toast('Career extended — keep going!', 'success'); return; }
+        case 'retire-career': {
+            const c = currentCareerFromRoute();
+            // If already confirmed (second click), execute retirement
+            if (btn.dataset.confirmed === 'true') {
+                retireCareer(c);
+                openModal(retirementModalHTML(c));
+                return;
+            }
+            // First click — show inline confirmation
+            openModal(`<div class="modal__head"><h2>Retire ${escapeHtml(c.name)}?</h2><button class="iconBtn" data-action="modal-close" aria-label="Close">✕</button></div>
+    <div class="modal__body"><p>Are you sure you want to retire? This ends the career permanently. All stats are preserved in the Stats tab.</p></div>
+    <div class="modal__foot">
+      <button class="btn btn--ghost" data-action="modal-close">Cancel — Keep Playing</button>
+      <button class="btn btn--danger" data-action="retire-career" data-confirmed="true">Yes, Retire Now</button>
+    </div>`);
+            return;
+        }
+        case 'extend-career': {
+            const c = currentCareerFromRoute();
+            extendCareer(c);
+            rerenderCurrentRoute();
+            toast('Career extended — keep going!', 'success');
+            return;
+        }
         case 'request-trade': {
             const c = currentCareerFromRoute();
             const res = requestTrade(c);
