@@ -108,17 +108,45 @@ function randomBirthday(minAge, maxAge, refYear) {
 }
 function generateLeague(sport) {
   const shape = LEAGUE_SHAPE[sport];
-  const realTeams = REAL_PRO_TEAMS[sport];
   
-  const teams = realTeams.map((rt, i) => {
+  // 1. IF IT'S A PRO SPORT, USE THE ACCURATE HARDCODED TEAMS
+  if (REAL_PRO_TEAMS[sport]) {
+    const realTeams = REAL_PRO_TEAMS[sport];
+    const teams = realTeams.map((rt, i) => {
+      return {
+        id: 'T' + i,
+        name: `${rt.city} ${rt.mascot}`.trim(), 
+        city: rt.city, 
+        mascot: rt.mascot,
+        conference: rt.conference,
+        division: rt.division,
+        rating: randInt(68, 92),
+        wins: 0, losses: 0, ties: 0,
+        pf: 0, pa: 0,
+        streak: 0,
+      };
+    });
+    const schedule = buildSeasonSchedule(teams.map(t => t.id), shape.games);
+    return { sport, teams, schedule, week: 0, season: 1, complete: false, playoffResult: null };
+  }
+  
+  // 2. IF IT'S COLLEGE OR HIGH SCHOOL, FALL BACK TO THE ORIGINAL RANDOM GENERATOR
+  // This uses your original city/mascot/conference math so college works perfectly again!
+  const cities = pickN(CITY_NAMES, shape.teams);
+  const mascots = pickN(MASCOTS, shape.teams);
+  
+  const teams = Array.from({ length: shape.teams }, (_, i) => {
+    const cIdx = Math.floor(i / (shape.teams / shape.conferences));
+    const dIdx = Math.floor(i / (shape.teams / (shape.conferences * shape.divisions))) % shape.divisions;
+    
     return {
       id: 'T' + i,
-      name: `${rt.city} ${rt.mascot}`.trim(), 
-      city: rt.city, 
-      mascot: rt.mascot,
-      conference: rt.conference,
-      division: rt.division,
-      rating: randInt(68, 92),
+      name: `${cities[i]} ${mascots[i]}`,
+      city: cities[i],
+      mascot: mascots[i],
+      conference: CONFERENCE_NAMES[cIdx] || `Conf ${cIdx + 1}`,
+      division: DIVISION_NAMES[dIdx] || `Div ${dIdx + 1}`,
+      rating: randInt(60, 85),
       wins: 0, losses: 0, ties: 0,
       pf: 0, pa: 0,
       streak: 0,
@@ -128,6 +156,7 @@ function generateLeague(sport) {
   const schedule = buildSeasonSchedule(teams.map(t => t.id), shape.games);
   return { sport, teams, schedule, week: 0, season: 1, complete: false, playoffResult: null };
 }
+
 function randomCollegeName() {
     return `${pick(CITY_NAMES)} ${pick(COLLEGE_SUFFIX)}`;
 }
