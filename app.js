@@ -125,19 +125,19 @@ const SPORTS = ['football', 'basketball', 'baseball', 'bowling', 'golf'];
 
 const SPORT_META = {
     football:  { label: 'Football',   icon: '🏈', accent: '#3FA34D', accentSoft: 'rgba(63,163,77,.16)',
-        leagueName: 'Gridiron Pro League', leagueAbbr: 'GPL', draftLabel: 'GPL Draft',
+        leagueName: 'National Football League', leagueAbbr: 'NFL', draftLabel: 'NFL Draft',
         proTermPlural: 'pro teams', unit: 'games' },
     basketball:{ label: 'Basketball', icon: '🏀', accent: '#E2832C', accentSoft: 'rgba(226,131,44,.16)',
-        leagueName: 'Hardwood Pro League', leagueAbbr: 'HPL', draftLabel: 'HPL Draft',
+        leagueName: 'National Basketball Association', leagueAbbr: 'NBA', draftLabel: 'NBA Draft',
         proTermPlural: 'pro teams', unit: 'games' },
     baseball:  { label: 'Baseball',   icon: '⚾', accent: '#C0503D', accentSoft: 'rgba(192,80,61,.16)',
-        leagueName: 'Diamond Pro League', leagueAbbr: 'DPL', draftLabel: 'DPL Draft',
+        leagueName: 'Major League Baseball', leagueAbbr: 'MLB', draftLabel: 'MLB Draft',
         proTermPlural: 'pro teams', unit: 'games' },
     bowling:   { label: 'Bowling',    icon: '🎳', accent: '#3E8FE8', accentSoft: 'rgba(62,143,232,.16)',
-        leagueName: 'Pro Bowling Circuit', leagueAbbr: 'PBC', draftLabel: null,
+        leagueName: 'Professional Bowlers Association', leagueAbbr: 'PBA', draftLabel: null,
         proTermPlural: 'tour stops', unit: 'tournaments' },
     golf:      { label: 'Golf',       icon: '⛳', accent: '#1F8A5F', accentSoft: 'rgba(31,138,95,.16)',
-        leagueName: 'Pro Golf Circuit', leagueAbbr: 'PGC', draftLabel: null,
+        leagueName: 'Professional Golfers Association', leagueAbbr: 'PGA', draftLabel: null,
         proTermPlural: 'tour stops', unit: 'tournaments' },
 };
 
