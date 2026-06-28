@@ -107,63 +107,63 @@ function randomBirthday(minAge, maxAge, refYear) {
     return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 function uniqueTeamNames(count) {
-  const cities = pickN(CITY_NAMES, count);
-  const mascots = pickN(MASCOTS, count);
-  return cities.map((c, i) => ({ 
-    city: c, 
-    mascot: mascots[i], 
-    name: `${c} ${mascots[i]}` 
-  }));
+    const cities = pickN(CITY_NAMES, count);
+    const mascots = pickN(MASCOTS, count);
+    return cities.map((c, i) => ({
+        city: c,
+        mascot: mascots[i],
+        name: `${c} ${mascots[i]}`
+    }));
 }
 function generateLeague(sport) {
-  const shape = LEAGUE_SHAPE[sport];
-  
-  // 1. IF IT'S A PRO SPORT, USE THE ACCURATE HARDCODED TEAMS
-  if (REAL_PRO_TEAMS[sport]) {
-    const realTeams = REAL_PRO_TEAMS[sport];
-    const teams = realTeams.map((rt, i) => {
-      return {
-        id: 'T' + i,
-        name: `${rt.city} ${rt.mascot}`.trim(), 
-        city: rt.city, 
-        mascot: rt.mascot,
-        conference: rt.conference,
-        division: rt.division,
-        rating: randInt(68, 92),
-        wins: 0, losses: 0, ties: 0,
-        pf: 0, pa: 0,
-        streak: 0,
-      };
+    const shape = LEAGUE_SHAPE[sport];
+
+    // 1. IF IT'S A PRO SPORT, USE THE ACCURATE HARDCODED TEAMS
+    if (REAL_PRO_TEAMS[sport]) {
+        const realTeams = REAL_PRO_TEAMS[sport];
+        const teams = realTeams.map((rt, i) => {
+            return {
+                id: 'T' + i,
+                name: `${rt.city} ${rt.mascot}`.trim(),
+                city: rt.city,
+                mascot: rt.mascot,
+                conference: rt.conference,
+                division: rt.division,
+                rating: randInt(68, 92),
+                wins: 0, losses: 0, ties: 0,
+                pf: 0, pa: 0,
+                streak: 0,
+            };
+        });
+        const schedule = buildSeasonSchedule(teams.map(t => t.id), shape.games);
+        return { sport, teams, schedule, week: 0, season: 1, complete: false, playoffResult: null };
+    }
+
+    // 2. IF IT'S COLLEGE OR HIGH SCHOOL, FALL BACK TO THE ORIGINAL RANDOM GENERATOR
+    // This uses your original city/mascot/conference math so college works perfectly again!
+    const cities = pickN(CITY_NAMES, shape.teams);
+    const mascots = pickN(MASCOTS, shape.teams);
+
+    const teams = Array.from({ length: shape.teams }, (_, i) => {
+        const cIdx = Math.floor(i / (shape.teams / shape.conferences));
+        const dIdx = Math.floor(i / (shape.teams / (shape.conferences * shape.divisions))) % shape.divisions;
+
+        return {
+            id: 'T' + i,
+            name: `${cities[i]} ${mascots[i]}`,
+            city: cities[i],
+            mascot: mascots[i],
+            conference: CONFERENCE_NAMES[cIdx] || `Conf ${cIdx + 1}`,
+            division: DIVISION_NAMES[dIdx] || `Div ${dIdx + 1}`,
+            rating: randInt(60, 85),
+            wins: 0, losses: 0, ties: 0,
+            pf: 0, pa: 0,
+            streak: 0,
+        };
     });
+
     const schedule = buildSeasonSchedule(teams.map(t => t.id), shape.games);
     return { sport, teams, schedule, week: 0, season: 1, complete: false, playoffResult: null };
-  }
-  
-  // 2. IF IT'S COLLEGE OR HIGH SCHOOL, FALL BACK TO THE ORIGINAL RANDOM GENERATOR
-  // This uses your original city/mascot/conference math so college works perfectly again!
-  const cities = pickN(CITY_NAMES, shape.teams);
-  const mascots = pickN(MASCOTS, shape.teams);
-  
-  const teams = Array.from({ length: shape.teams }, (_, i) => {
-    const cIdx = Math.floor(i / (shape.teams / shape.conferences));
-    const dIdx = Math.floor(i / (shape.teams / (shape.conferences * shape.divisions))) % shape.divisions;
-    
-    return {
-      id: 'T' + i,
-      name: `${cities[i]} ${mascots[i]}`,
-      city: cities[i],
-      mascot: mascots[i],
-      conference: CONFERENCE_NAMES[cIdx] || `Conf ${cIdx + 1}`,
-      division: DIVISION_NAMES[dIdx] || `Div ${dIdx + 1}`,
-      rating: randInt(60, 85),
-      wins: 0, losses: 0, ties: 0,
-      pf: 0, pa: 0,
-      streak: 0,
-    };
-  });
-  
-  const schedule = buildSeasonSchedule(teams.map(t => t.id), shape.games);
-  return { sport, teams, schedule, week: 0, season: 1, complete: false, playoffResult: null };
 }
 
 function randomCollegeName() {
@@ -194,124 +194,124 @@ const SPORT_META = {
 };
 
 const REAL_PRO_TEAMS = {
-  football: [
-    // AFC East
-    { city: "Buffalo", mascot: "Bills", conference: "AFC", division: "East" },
-    { city: "Miami", mascot: "Dolphins", conference: "AFC", division: "East" },
-    { city: "New England", mascot: "Patriots", conference: "AFC", division: "East" },
-    { city: "New York", mascot: "Jets", conference: "AFC", division: "East" },
-    // AFC North
-    { city: "Baltimore", mascot: "Ravvens", conference: "AFC", division: "North" },
-    { city: "Cincinnati", mascot: "Bengals", conference: "AFC", division: "North" },
-    { city: "Cleveland", mascot: "Browns", conference: "AFC", division: "North" },
-    { city: "Pittsburgh", mascot: "Steelers", conference: "AFC", division: "North" },
-    // AFC South
-    { city: "Houston", mascot: "Texans", conference: "AFC", division: "South" },
-    { city: "Indianapolis", mascot: "Colts", conference: "AFC", division: "South" },
-    { city: "Jacksonville", mascot: "Jaguars", conference: "AFC", division: "South" },
-    { city: "Tennessee", mascot: "Titans", conference: "AFC", division: "South" },
-    // AFC West
-    { city: "Denver", mascot: "Broncos", conference: "AFC", division: "West" },
-    { city: "Kansas City", mascot: "Chiefs", conference: "AFC", division: "West" },
-    { city: "Las Vegas", mascot: "Raiders", conference: "AFC", division: "West" },
-    { city: "Los Angeles", mascot: "Chargers", conference: "AFC", division: "West" },
-    // NFC East
-    { city: "Dallas", mascot: "Cowboys", conference: "NFC", division: "East" },
-    { city: "New York", mascot: "Giants", conference: "NFC", division: "East" },
-    { city: "Philadelphia", mascot: "Eagles", conference: "NFC", division: "East" },
-    { city: "Washington", mascot: "Commanders", conference: "NFC", division: "East" },
-    // NFC North
-    { city: "Chicago", mascot: "Bears", conference: "NFC", division: "North" },
-    { city: "Detroit", mascot: "Lions", conference: "NFC", division: "North" },
-    { city: "Green Bay", mascot: "Packers", conference: "NFC", division: "North" },
-    { city: "Minnesota", mascot: "Vikings", conference: "NFC", division: "North" },
-    // NFC South
-    { city: "Atlanta", mascot: "Falcons", conference: "NFC", division: "South" },
-    { city: "Carolina", mascot: "Panthers", conference: "NFC", division: "South" },
-    { city: "New Orleans", mascot: "Saints", conference: "NFC", division: "South" },
-    { city: "Tampa Bay", mascot: "Buccaneers", conference: "NFC", division: "South" },
-    // NFC West
-    { city: "Arizona", mascot: "Cardinals", conference: "NFC", division: "West" },
-    { city: "Los Angeles", mascot: "Rams", conference: "NFC", division: "West" },
-    { city: "San Francisco", mascot: "49ers", conference: "NFC", division: "West" },
-    { city: "Seattle", mascot: "Seahawks", conference: "NFC", division: "West" }
-  ],
-  basketball: [
-    // Eastern Atlantic
-    { city: "Boston", mascot: "Celtics", conference: "Eastern", division: "Atlantic" },
-    { city: "Brooklyn", mascot: "Nets", conference: "Eastern", division: "Atlantic" },
-    { city: "New York", mascot: "Knicks", conference: "Eastern", division: "Atlantic" },
-    { city: "Philadelphia", mascot: "76ers", conference: "Eastern", division: "Atlantic" },
-    { city: "Toronto", mascot: "Raptors", conference: "Eastern", division: "Atlantic" },
-    // Eastern Central
-    { city: "Chicago", mascot: "Bulls", conference: "Eastern", division: "Central" },
-    { city: "Cleveland", mascot: "Cavaliers", conference: "Eastern", division: "Central" },
-    { city: "Detroit", mascot: "Pistons", conference: "Eastern", division: "Central" },
-    { city: "Indiana", mascot: "Pacers", conference: "Eastern", division: "Central" },
-    { city: "Milwaukee", mascot: "Bucks", conference: "Eastern", division: "Central" },
-    // Eastern Southeast
-    { city: "Atlanta", mascot: "Hawks", conference: "Eastern", division: "Southeast" },
-    { city: "Charlotte", mascot: "Hornets", conference: "Eastern", division: "Southeast" },
-    { city: "Miami", mascot: "Heat", conference: "Eastern", division: "Southeast" },
-    { city: "Orlando", mascot: "Magic", conference: "Eastern", division: "Southeast" },
-    { city: "Washington", mascot: "Wizards", conference: "Eastern", division: "Southeast" },
-    // Western Northwest
-    { city: "Denver", mascot: "Nuggets", conference: "Western", division: "Northwest" },
-    { city: "Minnesota", mascot: "Timberwolves", conference: "Western", division: "Northwest" },
-    { city: "Oklahoma City", mascot: "Thunder", conference: "Western", division: "Northwest" },
-    { city: "Portland", mascot: "Trail Blazers", conference: "Western", division: "Northwest" },
-    { city: "Utah", mascot: "Jazz", conference: "Western", division: "Northwest" },
-    // Western Pacific
-    { city: "Golden State", mascot: "Warriors", conference: "Western", division: "Pacific" },
-    { city: "LA", mascot: "Clippers", conference: "Western", division: "Pacific" },
-    { city: "Los Angeles", mascot: "Lakers", conference: "Western", division: "Pacific" },
-    { city: "Phoenix", mascot: "Suns", conference: "Western", division: "Pacific" },
-    { city: "Sacramento", mascot: "Kings", conference: "Western", division: "Pacific" },
-    // Western Southwest
-    { city: "Dallas", mascot: "Mavericks", conference: "Western", division: "Southwest" },
-    { city: "Houston", mascot: "Rockets", conference: "Western", division: "Southwest" },
-    { city: "Memphis", mascot: "Grizzlies", conference: "Western", division: "Southwest" },
-    { city: "New Orleans", mascot: "Pelicans", conference: "Western", division: "Southwest" },
-    { city: "San Antonio", mascot: "Spurs", conference: "Western", division: "Southwest" }
-  ],
-  baseball: [
-    // AL East
-    { city: "Baltimore", mascot: "Orioles", conference: "American League", division: "AL East" },
-    { city: "Boston", mascot: "Red Sox", conference: "American League", division: "AL East" },
-    { city: "New York", mascot: "Yankees", conference: "American League", division: "AL East" },
-    { city: "Tampa Bay", mascot: "Rays", conference: "American League", division: "AL East" },
-    { city: "Toronto", mascot: "Blue Jays", conference: "American League", division: "AL East" },
-    // AL Central
-    { city: "Chicago", mascot: "White Sox", conference: "American League", division: "AL Central" },
-    { city: "Cleveland", mascot: "Guardians", conference: "American League", division: "AL Central" },
-    { city: "Detroit", mascot: "Tigers", conference: "American League", division: "AL Central" },
-    { city: "Kansas City", mascot: "Royals", conference: "American League", division: "AL Central" },
-    { city: "Minnesota", mascot: "Twins", conference: "American League", division: "AL Central" },
-    // AL West
-    { city: "Houston", mascot: "Astros", conference: "American League", division: "AL West" },
-    { city: "Los Angeles", mascot: "Angels", conference: "American League", division: "AL West" },
-    { city: "Sacramento", mascot: "Athletics", conference: "American League", division: "AL West" },
-    { city: "Seattle", mascot: "Mariners", conference: "American League", division: "AL West" },
-    { city: "Texas", mascot: "Rangers", conference: "American League", division: "AL West" },
-    // NL East
-    { city: "Atlanta", mascot: "Braves", conference: "National League", division: "NL East" },
-    { city: "Miami", mascot: "Marlins", conference: "National League", division: "NL East" },
-    { city: "New York", mascot: "Mets", conference: "National League", division: "NL East" },
-    { city: "Philadelphia", mascot: "Phillies", conference: "National League", division: "NL East" },
-    { city: "Washington", mascot: "Nationals", conference: "National League", division: "NL East" },
-    // NL Central
-    { city: "Chicago", mascot: "Cubs", conference: "National League", division: "NL Central" },
-    { city: "Cincinnati", mascot: "Reds", conference: "National League", division: "NL Central" },
-    { city: "Milwaukee", mascot: "Brewers", conference: "National League", division: "NL Central" },
-    { city: "Pittsburgh", mascot: "Pirates", conference: "National League", division: "NL Central" },
-    { city: "St. Louis", mascot: "Cardinals", conference: "National League", division: "NL Central" },
-    // NL West
-    { city: "Arizona", mascot: "Diamondbacks", conference: "National League", division: "NL West" },
-    { city: "Colorado", mascot: "Rockies", conference: "National League", division: "NL West" },
-    { city: "Los Angeles", mascot: "Dodgers", conference: "National League", division: "NL West" },
-    { city: "San Diego", mascot: "Padres", conference: "National League", division: "NL West" },
-    { city: "San Francisco", mascot: "Giants", conference: "National League", division: "NL West" }
-  ]
+    football: [
+        // AFC East
+        { city: "Buffalo", mascot: "Bills", conference: "AFC", division: "East" },
+        { city: "Miami", mascot: "Dolphins", conference: "AFC", division: "East" },
+        { city: "New England", mascot: "Patriots", conference: "AFC", division: "East" },
+        { city: "New York", mascot: "Jets", conference: "AFC", division: "East" },
+        // AFC North
+        { city: "Baltimore", mascot: "Ravvens", conference: "AFC", division: "North" },
+        { city: "Cincinnati", mascot: "Bengals", conference: "AFC", division: "North" },
+        { city: "Cleveland", mascot: "Browns", conference: "AFC", division: "North" },
+        { city: "Pittsburgh", mascot: "Steelers", conference: "AFC", division: "North" },
+        // AFC South
+        { city: "Houston", mascot: "Texans", conference: "AFC", division: "South" },
+        { city: "Indianapolis", mascot: "Colts", conference: "AFC", division: "South" },
+        { city: "Jacksonville", mascot: "Jaguars", conference: "AFC", division: "South" },
+        { city: "Tennessee", mascot: "Titans", conference: "AFC", division: "South" },
+        // AFC West
+        { city: "Denver", mascot: "Broncos", conference: "AFC", division: "West" },
+        { city: "Kansas City", mascot: "Chiefs", conference: "AFC", division: "West" },
+        { city: "Las Vegas", mascot: "Raiders", conference: "AFC", division: "West" },
+        { city: "Los Angeles", mascot: "Chargers", conference: "AFC", division: "West" },
+        // NFC East
+        { city: "Dallas", mascot: "Cowboys", conference: "NFC", division: "East" },
+        { city: "New York", mascot: "Giants", conference: "NFC", division: "East" },
+        { city: "Philadelphia", mascot: "Eagles", conference: "NFC", division: "East" },
+        { city: "Washington", mascot: "Commanders", conference: "NFC", division: "East" },
+        // NFC North
+        { city: "Chicago", mascot: "Bears", conference: "NFC", division: "North" },
+        { city: "Detroit", mascot: "Lions", conference: "NFC", division: "North" },
+        { city: "Green Bay", mascot: "Packers", conference: "NFC", division: "North" },
+        { city: "Minnesota", mascot: "Vikings", conference: "NFC", division: "North" },
+        // NFC South
+        { city: "Atlanta", mascot: "Falcons", conference: "NFC", division: "South" },
+        { city: "Carolina", mascot: "Panthers", conference: "NFC", division: "South" },
+        { city: "New Orleans", mascot: "Saints", conference: "NFC", division: "South" },
+        { city: "Tampa Bay", mascot: "Buccaneers", conference: "NFC", division: "South" },
+        // NFC West
+        { city: "Arizona", mascot: "Cardinals", conference: "NFC", division: "West" },
+        { city: "Los Angeles", mascot: "Rams", conference: "NFC", division: "West" },
+        { city: "San Francisco", mascot: "49ers", conference: "NFC", division: "West" },
+        { city: "Seattle", mascot: "Seahawks", conference: "NFC", division: "West" }
+    ],
+    basketball: [
+        // Eastern Atlantic
+        { city: "Boston", mascot: "Celtics", conference: "Eastern", division: "Atlantic" },
+        { city: "Brooklyn", mascot: "Nets", conference: "Eastern", division: "Atlantic" },
+        { city: "New York", mascot: "Knicks", conference: "Eastern", division: "Atlantic" },
+        { city: "Philadelphia", mascot: "76ers", conference: "Eastern", division: "Atlantic" },
+        { city: "Toronto", mascot: "Raptors", conference: "Eastern", division: "Atlantic" },
+        // Eastern Central
+        { city: "Chicago", mascot: "Bulls", conference: "Eastern", division: "Central" },
+        { city: "Cleveland", mascot: "Cavaliers", conference: "Eastern", division: "Central" },
+        { city: "Detroit", mascot: "Pistons", conference: "Eastern", division: "Central" },
+        { city: "Indiana", mascot: "Pacers", conference: "Eastern", division: "Central" },
+        { city: "Milwaukee", mascot: "Bucks", conference: "Eastern", division: "Central" },
+        // Eastern Southeast
+        { city: "Atlanta", mascot: "Hawks", conference: "Eastern", division: "Southeast" },
+        { city: "Charlotte", mascot: "Hornets", conference: "Eastern", division: "Southeast" },
+        { city: "Miami", mascot: "Heat", conference: "Eastern", division: "Southeast" },
+        { city: "Orlando", mascot: "Magic", conference: "Eastern", division: "Southeast" },
+        { city: "Washington", mascot: "Wizards", conference: "Eastern", division: "Southeast" },
+        // Western Northwest
+        { city: "Denver", mascot: "Nuggets", conference: "Western", division: "Northwest" },
+        { city: "Minnesota", mascot: "Timberwolves", conference: "Western", division: "Northwest" },
+        { city: "Oklahoma City", mascot: "Thunder", conference: "Western", division: "Northwest" },
+        { city: "Portland", mascot: "Trail Blazers", conference: "Western", division: "Northwest" },
+        { city: "Utah", mascot: "Jazz", conference: "Western", division: "Northwest" },
+        // Western Pacific
+        { city: "Golden State", mascot: "Warriors", conference: "Western", division: "Pacific" },
+        { city: "LA", mascot: "Clippers", conference: "Western", division: "Pacific" },
+        { city: "Los Angeles", mascot: "Lakers", conference: "Western", division: "Pacific" },
+        { city: "Phoenix", mascot: "Suns", conference: "Western", division: "Pacific" },
+        { city: "Sacramento", mascot: "Kings", conference: "Western", division: "Pacific" },
+        // Western Southwest
+        { city: "Dallas", mascot: "Mavericks", conference: "Western", division: "Southwest" },
+        { city: "Houston", mascot: "Rockets", conference: "Western", division: "Southwest" },
+        { city: "Memphis", mascot: "Grizzlies", conference: "Western", division: "Southwest" },
+        { city: "New Orleans", mascot: "Pelicans", conference: "Western", division: "Southwest" },
+        { city: "San Antonio", mascot: "Spurs", conference: "Western", division: "Southwest" }
+    ],
+    baseball: [
+        // AL East
+        { city: "Baltimore", mascot: "Orioles", conference: "American League", division: "AL East" },
+        { city: "Boston", mascot: "Red Sox", conference: "American League", division: "AL East" },
+        { city: "New York", mascot: "Yankees", conference: "American League", division: "AL East" },
+        { city: "Tampa Bay", mascot: "Rays", conference: "American League", division: "AL East" },
+        { city: "Toronto", mascot: "Blue Jays", conference: "American League", division: "AL East" },
+        // AL Central
+        { city: "Chicago", mascot: "White Sox", conference: "American League", division: "AL Central" },
+        { city: "Cleveland", mascot: "Guardians", conference: "American League", division: "AL Central" },
+        { city: "Detroit", mascot: "Tigers", conference: "American League", division: "AL Central" },
+        { city: "Kansas City", mascot: "Royals", conference: "American League", division: "AL Central" },
+        { city: "Minnesota", mascot: "Twins", conference: "American League", division: "AL Central" },
+        // AL West
+        { city: "Houston", mascot: "Astros", conference: "American League", division: "AL West" },
+        { city: "Los Angeles", mascot: "Angels", conference: "American League", division: "AL West" },
+        { city: "Sacramento", mascot: "Athletics", conference: "American League", division: "AL West" },
+        { city: "Seattle", mascot: "Mariners", conference: "American League", division: "AL West" },
+        { city: "Texas", mascot: "Rangers", conference: "American League", division: "AL West" },
+        // NL East
+        { city: "Atlanta", mascot: "Braves", conference: "National League", division: "NL East" },
+        { city: "Miami", mascot: "Marlins", conference: "National League", division: "NL East" },
+        { city: "New York", mascot: "Mets", conference: "National League", division: "NL East" },
+        { city: "Philadelphia", mascot: "Phillies", conference: "National League", division: "NL East" },
+        { city: "Washington", mascot: "Nationals", conference: "National League", division: "NL East" },
+        // NL Central
+        { city: "Chicago", mascot: "Cubs", conference: "National League", division: "NL Central" },
+        { city: "Cincinnati", mascot: "Reds", conference: "National League", division: "NL Central" },
+        { city: "Milwaukee", mascot: "Brewers", conference: "National League", division: "NL Central" },
+        { city: "Pittsburgh", mascot: "Pirates", conference: "National League", division: "NL Central" },
+        { city: "St. Louis", mascot: "Cardinals", conference: "National League", division: "NL Central" },
+        // NL West
+        { city: "Arizona", mascot: "Diamondbacks", conference: "National League", division: "NL West" },
+        { city: "Colorado", mascot: "Rockies", conference: "National League", division: "NL West" },
+        { city: "Los Angeles", mascot: "Dodgers", conference: "National League", division: "NL West" },
+        { city: "San Diego", mascot: "Padres", conference: "National League", division: "NL West" },
+        { city: "San Francisco", mascot: "Giants", conference: "National League", division: "NL West" }
+    ]
 };
 
 
@@ -617,11 +617,11 @@ const SKIN_TONES = ['#3A2618', '#5C3A21', '#8A5A36', '#C68B59', '#E0AC76', '#F2D
   Your files: Buzz-Black, Short-Brown, Long-Curly-Light-Brown, etc.
   ---------------------------------------------------------------- */
 const HAIR_COLORS = [
-   { name: 'Black',       hex: '#0B0B0B' },
-   { name: 'Brown',       hex: '#2C1B10' },
-   { name: 'Light-Brown', hex: '#8C6239' },
-   { name: 'Blonde',      hex: '#C9A05C' },
-   { name: 'Ginger',      hex: '#B23A3A' },
+    { name: 'Black',       hex: '#0B0B0B' },
+    { name: 'Brown',       hex: '#2C1B10' },
+    { name: 'Light-Brown', hex: '#8C6239' },
+    { name: 'Blonde',      hex: '#C9A05C' },
+    { name: 'Ginger',      hex: '#B23A3A' },
 ];
 
 
@@ -630,28 +630,28 @@ const HAIR_COLORS = [
   'bald' has no image — we just render nothing.
   -------------------------------------------------------------------- */
 const HAIR_STYLES = [
-   'bald',
-   'Buzz',
-   'Short',
-   'Curly',
-   'Long-Curly',
-   'Long-Straight',
-   'Long-Wavy',
+    'bald',
+    'Buzz',
+    'Short',
+    'Curly',
+    'Long-Curly',
+    'Long-Straight',
+    'Long-Wavy',
 ];
 
 
 /* Returns a display label for the style chip buttons */
 function hairStyleLabel(style) {
-   const labels = {
-       'bald':         'Bald',
-       'Buzz':         'Buzz',
-       'Short':        'Short',
-       'Curly':        'Curly',
-       'Long-Curly':   'Long Curly',
-       'Long-Straight':'Long Straight',
-       'Long-Wavy':    'Long Wavy',
-   };
-   return labels[style] || style;
+    const labels = {
+        'bald':         'Bald',
+        'Buzz':         'Buzz',
+        'Short':        'Short',
+        'Curly':        'Curly',
+        'Long-Curly':   'Long Curly',
+        'Long-Straight':'Long Straight',
+        'Long-Wavy':    'Long Wavy',
+    };
+    return labels[style] || style;
 }
 
 
@@ -663,17 +663,17 @@ function hairStyleLabel(style) {
   (transparent background, head centred) line up with the face circle below.
   Tweak x/y/width/height here if any style needs repositioning. */
 function hairImageTag(style, colorName) {
-   if (!style || style === 'bald') return '';
+    if (!style || style === 'bald') return '';
 
 
-   /* colorName may arrive as a plain string (legacy saves) or already correct.
-      Map any old hex values that might be stored to the closest named color. */
-   const resolvedColor = resolveHairColorName(colorName);
+    /* colorName may arrive as a plain string (legacy saves) or already correct.
+       Map any old hex values that might be stored to the closest named color. */
+    const resolvedColor = resolveHairColorName(colorName);
 
 
-   const filename = `${style}-${resolvedColor}`;
-   /* Path is just the filename — images sit in the same folder as index.html */
-   return `<image href="${filename}.png"
+    const filename = `${style}-${resolvedColor}`;
+    /* Path is just the filename — images sit in the same folder as index.html */
+    return `<image href="${filename}.png"
        x="0" y="0" width="208" height="220"
        preserveAspectRatio="xMidYMid meet"
        style="pointer-events:none"/>`;
@@ -683,44 +683,44 @@ function hairImageTag(style, colorName) {
 /* Resolves a stored color value to a valid color name.
   Handles: { name, hex } objects, plain name strings, and legacy hex strings. */
 function resolveHairColorName(colorVal) {
-   if (!colorVal) return 'Black';
-   // Already an object with a name property
-   if (typeof colorVal === 'object' && colorVal.name) return colorVal.name;
-   // Plain string that matches a known name
-   const byName = HAIR_COLORS.find(c => c.name === colorVal);
-   if (byName) return byName.name;
-   // Legacy: stored as hex — map to closest named color
-   const byHex = HAIR_COLORS.find(c => c.hex === colorVal);
-   if (byHex) return byHex.name;
-   // Fallback
-   return 'Black';
+    if (!colorVal) return 'Black';
+    // Already an object with a name property
+    if (typeof colorVal === 'object' && colorVal.name) return colorVal.name;
+    // Plain string that matches a known name
+    const byName = HAIR_COLORS.find(c => c.name === colorVal);
+    if (byName) return byName.name;
+    // Legacy: stored as hex — map to closest named color
+    const byHex = HAIR_COLORS.find(c => c.hex === colorVal);
+    if (byHex) return byHex.name;
+    // Fallback
+    return 'Black';
 }
 
 
 /* Returns the hex for swatch rendering from whatever format colorVal is in */
 function resolveHairColorHex(colorVal) {
-   if (!colorVal) return HAIR_COLORS[0].hex;
-   if (typeof colorVal === 'object' && colorVal.hex) return colorVal.hex;
-   const byName = HAIR_COLORS.find(c => c.name === colorVal);
-   if (byName) return byName.hex;
-   const byHex = HAIR_COLORS.find(c => c.hex === colorVal);
-   if (byHex) return byHex.hex;
-   return colorVal; // pass through if already a hex
+    if (!colorVal) return HAIR_COLORS[0].hex;
+    if (typeof colorVal === 'object' && colorVal.hex) return colorVal.hex;
+    const byName = HAIR_COLORS.find(c => c.name === colorVal);
+    if (byName) return byName.hex;
+    const byHex = HAIR_COLORS.find(c => c.hex === colorVal);
+    if (byHex) return byHex.hex;
+    return colorVal; // pass through if already a hex
 }
 
 
 function buildAvatarSVG(opts) {
-   const { skinTone, hairStyle, hairColor, jerseyColor, number, heightIn, weightLb } = opts;
-   const bmi = weightLb / (heightIn * heightIn) * 703;
-   const frameScale = clamp(0.86 + (bmi - 21) / 38, 0.84, 1.22).toFixed(3);
-   const numStr = (number === '' || number === null || number === undefined) ? '' : String(number);
+    const { skinTone, hairStyle, hairColor, jerseyColor, number, heightIn, weightLb } = opts;
+    const bmi = weightLb / (heightIn * heightIn) * 703;
+    const frameScale = clamp(0.86 + (bmi - 21) / 38, 0.84, 1.22).toFixed(3);
+    const numStr = (number === '' || number === null || number === undefined) ? '' : String(number);
 
 
-   /* Resolve the color name for the image filename */
-   const colorName = resolveHairColorName(hairColor);
+    /* Resolve the color name for the image filename */
+    const colorName = resolveHairColorName(hairColor);
 
 
-   return `<svg viewBox="0 0 208 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="player avatar">
+    return `<svg viewBox="0 0 208 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="player avatar">
    <defs>
      <clipPath id="frameClip"><rect x="0" y="0" width="208" height="220" rx="20"/></clipPath>
    </defs>
@@ -741,37 +741,37 @@ function buildAvatarSVG(opts) {
  </svg>`;
 }
 function hairImageTag(style, colorName) {
-   if (!style || style === 'bald') return '';
+    if (!style || style === 'bald') return '';
 
 
-   const resolvedColor = resolveHairColorName(colorName);
-   const filename = `${style}-${resolvedColor}`;
+    const resolvedColor = resolveHairColorName(colorName);
+    const filename = `${style}-${resolvedColor}`;
 
 
-   // Default values (what you currently have)
-   let imgX = 0;
-   let imgY = 0;
-   let imgWidth = 208;
-   let imgHeight = 220;
+    // Default values (what you currently have)
+    let imgX = 0;
+    let imgY = 0;
+    let imgWidth = 208;
+    let imgHeight = 220;
 
 
-   // --- Tweak these to nudge the hair into place ---
-   // Example: Sliding the hair down by 15px and scaling it up slightly
-   imgY = -10;        // Positive numbers push the image down
-   imgX = -11;       // Negative numbers push the image left to keep it centered
-   imgWidth = 228;   // Increased width to scale it up
-   imgHeight = 230;  // Increased height to scale it up
+    // --- Tweak these to nudge the hair into place ---
+    // Example: Sliding the hair down by 15px and scaling it up slightly
+    imgY = -10;        // Positive numbers push the image down
+    imgX = -11;       // Negative numbers push the image left to keep it centered
+    imgWidth = 228;   // Increased width to scale it up
+    imgHeight = 230;  // Increased height to scale it up
 
 
-   /* // OPTIONAL: If different styles need different tweaks, use a switch statement:
-   if (style === 'Short') {
-       imgY = 18;
-   }
-   }
-   */
+    /* // OPTIONAL: If different styles need different tweaks, use a switch statement:
+    if (style === 'Short') {
+        imgY = 18;
+    }
+    }
+    */
 
 
-   return `<image href="${filename}.png"
+    return `<image href="${filename}.png"
        x="${imgX}" y="${imgY}" width="${imgWidth}" height="${imgHeight}"
        preserveAspectRatio="xMidYMid meet"
        style="pointer-events:none"/>`;
@@ -1315,16 +1315,21 @@ function simulateHighSchoolGame(career) {
     return entry;
 }
 
-function generateCollegeOffers(n) {
-    const offers = [];
-    const used = new Set();
-    while (offers.length < n) {
-        const name = randomCollegeName();
-        if (used.has(name)) continue;
-        used.add(name);
-        offers.push({ name, conference: pick(CONFERENCE_NAMES), prestige: randInt(2, 5) });
-    }
-    return offers.sort((a, b) => b.prestige - a.prestige);
+function generateCollegeOffers(sport) {
+    const meta = SPORT_META[sport];
+    if (!meta) return [];
+
+    const raw = uniqueTeamNames(3);
+    return raw.map((t, i) => {
+        return {
+            id: 'C' + i,
+            name: t.name,
+            city: t.city,
+            mascot: t.mascot,
+            prestige: randInt(40, 85),
+            bonus: randInt(0, 3) * 500
+        };
+    });
 }
 function commitToCollege(career, offer) {
     archiveSeason(career, 'highschool', career.highSchool.name);
