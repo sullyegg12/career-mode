@@ -599,20 +599,8 @@ function skillPointsEarned(stage, perf, sport) {
   ---------------------------------------------------------------------- */
 
 
-
-
-
-
-
-
 /* ---- Skin tones (unchanged) ---- */
 const SKIN_TONES = ['#3A2618', '#5C3A21', '#8A5A36', '#C68B59', '#E0AC76', '#F2D2A9'];
-
-
-
-
-
-
 
 
 /* ---- Hair colors: named objects so filenames match exactly ----
@@ -622,18 +610,12 @@ const SKIN_TONES = ['#3A2618', '#5C3A21', '#8A5A36', '#C68B59', '#E0AC76', '#F2D
   Your files: Buzz-Black, Short-Brown, Long-Curly-Light-Brown, etc.
   ---------------------------------------------------------------- */
 const HAIR_COLORS = [
-    { name: 'Black',       hex: '#0B0B0B' },
-    { name: 'Brown',       hex: '#2C1B10' },
-    { name: 'Light-Brown', hex: '#8C6239' },
-    { name: 'Blonde',      hex: '#C9A05C' },
-    { name: 'Ginger',      hex: '#B23A3A' },
+   { name: 'Black',       hex: '#0B0B0B' },
+   { name: 'Brown',       hex: '#2C1B10' },
+   { name: 'Light-Brown', hex: '#8C6239' },
+   { name: 'Blonde',      hex: '#C9A05C' },
+   { name: 'Ginger',      hex: '#B23A3A' },
 ];
-
-
-
-
-
-
 
 
 /* ---- Hair styles: keys match the style prefix in your filenames ----
@@ -641,157 +623,97 @@ const HAIR_COLORS = [
   'bald' has no image — we just render nothing.
   -------------------------------------------------------------------- */
 const HAIR_STYLES = [
-    'bald',
-    'Buzz',
-    'Short',
-    'Curly',
-    'Long-Curly',
-    'Long-Straight',
-    'Long-Wavy',
+   'bald',
+   'Buzz',
+   'Short',
+   'Curly',
+   'Long-Curly',
+   'Long-Straight',
+   'Long-Wavy',
 ];
-
-
-
-
-
-
 
 
 /* Returns a display label for the style chip buttons */
 function hairStyleLabel(style) {
-    const labels = {
-        'bald':         'Bald',
-        'Buzz':         'Buzz',
-        'Short':        'Short',
-        'Curly':        'Curly',
-        'Long-Curly':   'Long Curly',
-        'Long-Straight':'Long Straight',
-        'Long-Wavy':    'Long Wavy',
-    };
-    return labels[style] || style;
+   const labels = {
+       'bald':         'Bald',
+       'Buzz':         'Buzz',
+       'Short':        'Short',
+       'Curly':        'Curly',
+       'Long-Curly':   'Long Curly',
+       'Long-Straight':'Long Straight',
+       'Long-Wavy':    'Long Wavy',
+   };
+   return labels[style] || style;
 }
-
-
-
-
-
-
 
 
 /* Builds the <image> tag that places your PNG inside the SVG.
   Files live in the project root alongside index.html, e.g. Short-Black.png
 
 
-
-
-
-
-
-
   The SVG viewBox is 208×220. The image fills the whole frame so your PNGs
   (transparent background, head centred) line up with the face circle below.
   Tweak x/y/width/height here if any style needs repositioning. */
 function hairImageTag(style, colorName) {
-    if (!style || style === 'bald') return '';
+   if (!style || style === 'bald') return '';
 
 
+   /* colorName may arrive as a plain string (legacy saves) or already correct.
+      Map any old hex values that might be stored to the closest named color. */
+   const resolvedColor = resolveHairColorName(colorName);
 
 
-
-
-
-
-    /* colorName may arrive as a plain string (legacy saves) or already correct.
-       Map any old hex values that might be stored to the closest named color. */
-    const resolvedColor = resolveHairColorName(colorName);
-
-
-
-
-
-
-
-
-    const filename = `${style}-${resolvedColor}`;
-    /* Path is just the filename — images sit in the same folder as index.html */
-    return `<image href="${filename}.png"
+   const filename = `${style}-${resolvedColor}`;
+   /* Path is just the filename — images sit in the same folder as index.html */
+   return `<image href="${filename}.png"
        x="0" y="0" width="208" height="220"
        preserveAspectRatio="xMidYMid meet"
        style="pointer-events:none"/>`;
 }
 
 
-
-
-
-
-
-
 /* Resolves a stored color value to a valid color name.
   Handles: { name, hex } objects, plain name strings, and legacy hex strings. */
 function resolveHairColorName(colorVal) {
-    if (!colorVal) return 'Black';
-    // Already an object with a name property
-    if (typeof colorVal === 'object' && colorVal.name) return colorVal.name;
-    // Plain string that matches a known name
-    const byName = HAIR_COLORS.find(c => c.name === colorVal);
-    if (byName) return byName.name;
-    // Legacy: stored as hex — map to closest named color
-    const byHex = HAIR_COLORS.find(c => c.hex === colorVal);
-    if (byHex) return byHex.name;
-    // Fallback
-    return 'Black';
+   if (!colorVal) return 'Black';
+   // Already an object with a name property
+   if (typeof colorVal === 'object' && colorVal.name) return colorVal.name;
+   // Plain string that matches a known name
+   const byName = HAIR_COLORS.find(c => c.name === colorVal);
+   if (byName) return byName.name;
+   // Legacy: stored as hex — map to closest named color
+   const byHex = HAIR_COLORS.find(c => c.hex === colorVal);
+   if (byHex) return byHex.name;
+   // Fallback
+   return 'Black';
 }
-
-
-
-
-
-
 
 
 /* Returns the hex for swatch rendering from whatever format colorVal is in */
 function resolveHairColorHex(colorVal) {
-    if (!colorVal) return HAIR_COLORS[0].hex;
-    if (typeof colorVal === 'object' && colorVal.hex) return colorVal.hex;
-    const byName = HAIR_COLORS.find(c => c.name === colorVal);
-    if (byName) return byName.hex;
-    const byHex = HAIR_COLORS.find(c => c.hex === colorVal);
-    if (byHex) return byHex.hex;
-    return colorVal; // pass through if already a hex
+   if (!colorVal) return HAIR_COLORS[0].hex;
+   if (typeof colorVal === 'object' && colorVal.hex) return colorVal.hex;
+   const byName = HAIR_COLORS.find(c => c.name === colorVal);
+   if (byName) return byName.hex;
+   const byHex = HAIR_COLORS.find(c => c.hex === colorVal);
+   if (byHex) return byHex.hex;
+   return colorVal; // pass through if already a hex
 }
 
 
-
-
-
-
-
-
 function buildAvatarSVG(opts) {
-    const { skinTone, hairStyle, hairColor, jerseyColor, number, heightIn, weightLb } = opts;
-    const bmi = weightLb / (heightIn * heightIn) * 703;
-    const frameScale = clamp(0.86 + (bmi - 21) / 38, 0.84, 1.22).toFixed(3);
-    const numStr = (number === '' || number === null || number === undefined) ? '' : String(number);
+   const { skinTone, hairStyle, hairColor, jerseyColor, number, heightIn, weightLb } = opts;
+   const bmi = weightLb / (heightIn * heightIn) * 703;
+   const frameScale = clamp(0.86 + (bmi - 21) / 38, 0.84, 1.22).toFixed(3);
+   const numStr = (number === '' || number === null || number === undefined) ? '' : String(number);
 
 
+   /* Resolve the color name for the image filename */
+   const colorName = resolveHairColorName(hairColor);
 
 
-
-
-
-
-    /* Resolve the color name for the image filename */
-    const colorName = resolveHairColorName(hairColor);
-
-
-
-
-
-
-
-
-    return `<svg viewBox="0 0 208 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="player avatar">
+   return `<svg viewBox="0 0 208 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="player avatar">
    <defs>
      <clipPath id="frameClip"><rect x="0" y="0" width="208" height="220" rx="20"/></clipPath>
    </defs>
@@ -812,84 +734,44 @@ function buildAvatarSVG(opts) {
  </svg>`;
 }
 function hairImageTag(style, colorName) {
-    if (!style || style === 'bald') return '';
+   if (!style || style === 'bald') return '';
 
 
+   const resolvedColor = resolveHairColorName(colorName);
+   const filename = `${style}-${resolvedColor}`;
 
 
+   // Default values (what you currently have)
+   let imgX = 0;
+   let imgY = 0;
+   let imgWidth = 208;
+   let imgHeight = 220;
 
 
+   // --- Tweak these to nudge the hair into place ---
+   // Example: Sliding the hair down by 15px and scaling it up slightly
+   imgY = -10;        // Positive numbers push the image down
+   imgX = -11;       // Negative numbers push the image left to keep it centered
+   imgWidth = 228;   // Increased width to scale it up
+   imgHeight = 230;  // Increased height to scale it up
 
 
-    const resolvedColor = resolveHairColorName(colorName);
-    const filename = `${style}-${resolvedColor}`;
+   /* // OPTIONAL: If different styles need different tweaks, use a switch statement:
+   if (style === 'Short') {
+       imgY = 18;
+   }
+   }
+   */
 
 
-
-
-
-
-
-
-    // Default values (what you currently have)
-    let imgX = 0;
-    let imgY = 0;
-    let imgWidth = 208;
-    let imgHeight = 220;
-
-
-
-
-
-
-
-
-    // --- Tweak these to nudge the hair into place ---
-    // Example: Sliding the hair down by 15px and scaling it up slightly
-    imgY = -10;        // Positive numbers push the image down
-    imgX = -11;       // Negative numbers push the image left to keep it centered
-    imgWidth = 228;   // Increased width to scale it up
-    imgHeight = 230;  // Increased height to scale it up
-
-
-
-
-
-
-
-
-    /* // OPTIONAL: If different styles need different tweaks, use a switch statement:
-    if (style === 'Short') {
-        imgY = 18;
-    }
-    }
-    */
-
-
-
-
-
-
-
-
-    return `<image href="${filename}.png"
+   return `<image href="${filename}.png"
        x="${imgX}" y="${imgY}" width="${imgWidth}" height="${imgHeight}"
        preserveAspectRatio="xMidYMid meet"
        style="pointer-events:none"/>`;
 }
 
 
-
-
-
-
-
-
 function escapeHtmlSvg(s) { return String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])); }
-
-
-
-
 /* ----------------------------------------------------------------------
    6. STAT FIELD DEFINITIONS (for tables) + zeroed totals
    ---------------------------------------------------------------------- */
