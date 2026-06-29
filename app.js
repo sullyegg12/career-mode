@@ -6,10 +6,14 @@
 'use strict';
 
 
+
+
 /* ----------------------------------------------------------------------
    0. CORE UTILITIES
    ---------------------------------------------------------------------- */
 const STORAGE_KEY = 'careerMode.save.v1';
+
+
 
 
 function uid() {
@@ -62,6 +66,8 @@ function monthDay(birthdayISO) {
 }
 
 
+
+
 /* ----------------------------------------------------------------------
    1. NAME / WORLD-BUILDING POOLS  (all fictional — no real leagues/teams)
    ---------------------------------------------------------------------- */
@@ -96,6 +102,8 @@ const LAST_NAMES = ["Carter","Bennett","Hayes","Reed","Coleman","Brooks","Foster
 const NATIONALITY_HOMETOWNS = ["Toronto, ON","London, England","Sydney, Australia","Berlin, Germany",
     "Lagos, Nigeria","Seoul, South Korea","Mexico City, Mexico","Sao Paulo, Brazil","Manila, Philippines",
     "Kingston, Jamaica"];
+
+
 
 
 function randomFullName(gender) {
@@ -151,6 +159,8 @@ const REAL_LEAGUES = {
 };
 
 
+
+
 const REAL_MILB_TEAMS = [
     "Durham Bulls", "Toledo Mud Hens", "Syracuse Mets", "Worcester Red Sox",
     "Scranton/Wilkes-Barre RailRiders", "Lehigh Valley IronPigs", "Buffalo Bisons",
@@ -160,10 +170,16 @@ const REAL_MILB_TEAMS = [
 
 
 
+
+
+
+
 /* ----------------------------------------------------------------------
    2. SPORT CONFIGURATION
    ---------------------------------------------------------------------- */
 const SPORTS = ['football', 'basketball', 'baseball', 'bowling', 'golf'];
+
+
 
 
 const SPORT_META = {
@@ -185,9 +201,13 @@ const SPORT_META = {
 };
 
 
+
+
 const HAS_POSITIONS = { football: true, basketball: true, baseball: true, bowling: false, golf: false };
 const HAS_TRADES = { football: true, basketball: true, baseball: true, bowling: false, golf: false };
 const HAS_MINORS = { baseball: true };
+
+
 
 
 const POSITIONS = {
@@ -226,9 +246,13 @@ const POSITIONS = {
 };
 
 
+
+
 function positionList(sport) { return Object.keys(POSITIONS[sport]); }
 function posInfo(sport, posKey) { return POSITIONS[sport][posKey] || POSITIONS[sport]['GEN']; }
 function roleAttrs(sport, posKey) { return posInfo(sport, posKey).attrs; }
+
+
 
 
 const POWER_ATTR_HINTS = ['Power','Strength','Run Blocking','Post Scoring','Velocity','Hit Power','Kick Power','Driving Power'];
@@ -239,6 +263,8 @@ function findHintAttr(attrs, hints) {
 }
 
 
+
+
 const LEAGUE_SHAPE = {
     football:  { teams: 32, conferences: 2, divisions: 4, games: 17, directSeeds: 7, playInPool: 0, byeCount: 1 },
     basketball: { teams: 30, conferences: 2, divisions: 3, games: 82, directSeeds: 6, playInPool: 4, byeCount: 0 },
@@ -247,7 +273,11 @@ const LEAGUE_SHAPE = {
 const MINORS_SHAPE = { teams: 10, gamesToCallUpEligible: 5 };
 
 
+
+
 const SEASON_REFERENCE_GAMES = { football: 14, basketball: 22, baseball: 14 };
+
+
 
 
 const AGE_MILESTONES = {
@@ -266,6 +296,8 @@ const RETIREMENT_RULES = {
 };
 const MAX_DECLINE_PER_SEASON = 6;
 const CONDITIONING_START = 58;
+
+
 
 
 /* ---- Career Tiers: chosen at creation, cap how dominant a player can be ----
@@ -292,10 +324,14 @@ const TIER_OVERALL_CAPS = {
 const DEFAULT_TIER = 'star';
 
 
+
+
 const TOUR_SHAPE = {
     bowling: { eventsPerSeason: 20, fieldSize: 70 },
     golf:    { eventsPerSeason: 42, fieldSize: 90 },
 };
+
+
 
 
 /* ----------------------------------------------------------------------
@@ -307,6 +343,8 @@ function defaultState() {
     return { version: 1, careers, settings: { lastSport: null } };
 }
 let STATE = loadState();
+
+
 
 
 function loadState() {
@@ -358,6 +396,8 @@ function deleteCareer(sport, id) {
 }
 
 
+
+
 /* ----------------------------------------------------------------------
    4. ATTRIBUTES / OVERALL / PROGRESSION ENGINE
    ---------------------------------------------------------------------- */
@@ -365,9 +405,12 @@ const START_OVERALL_TARGET = 65;
 const ATTR_MIN = 25, ATTR_MAX = 99;
 
 
+
+
 function generateStartingAttributes(sport, posKey, heightIn, weightLb) {
     const attrs = roleAttrs(sport, posKey);
     const base = {};
+
 
     // For basketball, only the first 6 are "primary" — extras start lower
     // so they don't drag down the overall unfairly
@@ -375,14 +418,17 @@ function generateStartingAttributes(sport, posKey, heightIn, weightLb) {
     const primaryAttrs = attrs.slice(0, primaryCount);
     const extraAttrs = attrs.slice(primaryCount);
 
+
     let raw = primaryAttrs.map(() => randInt(58, 68));
     const avg = raw.reduce((a, b) => a + b, 0) / raw.length;
     const diff = START_OVERALL_TARGET - avg;
     raw = raw.map(v => clamp(Math.round(v + diff), 45, 75));
     primaryAttrs.forEach((a, i) => base[a] = raw[i]);
 
+
     // Extra attributes start at 40 — cheap to upgrade but don't inflate overall
     extraAttrs.forEach(a => base[a] = 50);
+
 
     const info = posInfo(sport, posKey);
     const heightDelta = (heightIn - info.h) / info.h;
@@ -391,6 +437,7 @@ function generateStartingAttributes(sport, posKey, heightIn, weightLb) {
     const speedAttr = findHintAttr(attrs, SPEED_ATTR_HINTS);
     if (powerAttr) base[powerAttr] = clamp(base[powerAttr] + clamp(Math.round(weightDelta * 22), -9, 9), ATTR_MIN, ATTR_MAX);
     if (speedAttr) base[speedAttr] = clamp(base[speedAttr] + clamp(Math.round(-weightDelta * 14 - heightDelta * 6), -9, 9), ATTR_MIN, ATTR_MAX);
+
 
     return base;
 }
@@ -454,13 +501,25 @@ function performanceScore(career) {
     const noise = (rngNormal01() - 0.5) * 60;
     const badgeBonus = totalBadgeBonus(career);
     const raw = clamp(Math.round(base * 0.6 + 40 * rngNormal01() * 0.6 + noise * 0.5 + base * 0.1 + badgeBonus), 5, 100);
-    /* Occasional blowup game (+15%) or stinker (-20%) for realism */
     const roll = Math.random();
     const modifier = roll < 0.08 ? 1.15 : (roll < 0.16 ? 0.80 : 1.0);
     const modded = clamp(Math.round(raw * modifier), 5, 100);
-    /* Apply tier cap — G.O.A.T. is uncapped, lower tiers can't consistently peak */
     const tier = CAREER_TIERS[career.tier || DEFAULT_TIER] || CAREER_TIERS[DEFAULT_TIER];
-    return Math.min(modded, tier.perfCap);
+    const capped = Math.min(modded, tier.perfCap);
+
+
+    // Age penalty on top of attribute decline — older players have
+    // worse games more often and can't hit their ceiling as reliably
+    const rules = RETIREMENT_RULES[career.sport];
+    if (career.age && rules && career.age > rules.declineStart) {
+        const yearsIntoDecline = career.age - rules.declineStart;
+        // -2 perf per year into decline, accelerating after year 4
+        const agePenalty = yearsIntoDecline <= 4
+            ? yearsIntoDecline * 2
+            : 8 + (yearsIntoDecline - 4) * 4;
+        return clamp(capped - agePenalty, 5, 100);
+    }
+    return capped;
 }
 
 
@@ -533,6 +592,8 @@ function skillPointsEarned(stage, perf, sport) {
 }
 
 
+
+
 /* ----------------------------------------------------------------------
   5. AVATAR — hair images + SVG bust
   ---------------------------------------------------------------------- */
@@ -540,8 +601,16 @@ function skillPointsEarned(stage, perf, sport) {
 
 
 
+
+
+
+
 /* ---- Skin tones (unchanged) ---- */
 const SKIN_TONES = ['#3A2618', '#5C3A21', '#8A5A36', '#C68B59', '#E0AC76', '#F2D2A9'];
+
+
+
+
 
 
 
@@ -563,6 +632,10 @@ const HAIR_COLORS = [
 
 
 
+
+
+
+
 /* ---- Hair styles: keys match the style prefix in your filenames ----
   Your files use: Buzz, Short, Long-Curly, Curly, Long-Straight, Long-Wavy
   'bald' has no image — we just render nothing.
@@ -576,6 +649,10 @@ const HAIR_STYLES = [
     'Long-Straight',
     'Long-Wavy',
 ];
+
+
+
+
 
 
 
@@ -597,8 +674,16 @@ function hairStyleLabel(style) {
 
 
 
+
+
+
+
 /* Builds the <image> tag that places your PNG inside the SVG.
   Files live in the project root alongside index.html, e.g. Short-Black.png
+
+
+
+
 
 
 
@@ -612,9 +697,17 @@ function hairImageTag(style, colorName) {
 
 
 
+
+
+
+
     /* colorName may arrive as a plain string (legacy saves) or already correct.
        Map any old hex values that might be stored to the closest named color. */
     const resolvedColor = resolveHairColorName(colorName);
+
+
+
+
 
 
 
@@ -626,6 +719,10 @@ function hairImageTag(style, colorName) {
        preserveAspectRatio="xMidYMid meet"
        style="pointer-events:none"/>`;
 }
+
+
+
+
 
 
 
@@ -649,6 +746,10 @@ function resolveHairColorName(colorVal) {
 
 
 
+
+
+
+
 /* Returns the hex for swatch rendering from whatever format colorVal is in */
 function resolveHairColorHex(colorVal) {
     if (!colorVal) return HAIR_COLORS[0].hex;
@@ -663,6 +764,10 @@ function resolveHairColorHex(colorVal) {
 
 
 
+
+
+
+
 function buildAvatarSVG(opts) {
     const { skinTone, hairStyle, hairColor, jerseyColor, number, heightIn, weightLb } = opts;
     const bmi = weightLb / (heightIn * heightIn) * 703;
@@ -672,8 +777,16 @@ function buildAvatarSVG(opts) {
 
 
 
+
+
+
+
     /* Resolve the color name for the image filename */
     const colorName = resolveHairColorName(hairColor);
+
+
+
+
 
 
 
@@ -704,8 +817,16 @@ function hairImageTag(style, colorName) {
 
 
 
+
+
+
+
     const resolvedColor = resolveHairColorName(colorName);
     const filename = `${style}-${resolvedColor}`;
+
+
+
+
 
 
 
@@ -715,6 +836,10 @@ function hairImageTag(style, colorName) {
     let imgY = 0;
     let imgWidth = 208;
     let imgHeight = 220;
+
+
+
+
 
 
 
@@ -729,12 +854,20 @@ function hairImageTag(style, colorName) {
 
 
 
+
+
+
+
     /* // OPTIONAL: If different styles need different tweaks, use a switch statement:
     if (style === 'Short') {
         imgY = 18;
     }
     }
     */
+
+
+
+
 
 
 
@@ -748,7 +881,13 @@ function hairImageTag(style, colorName) {
 
 
 
+
+
+
+
 function escapeHtmlSvg(s) { return String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])); }
+
+
 
 
 /* ----------------------------------------------------------------------
@@ -771,6 +910,8 @@ const BASEBALL_STAT_FIELDS = {
 };
 const BOWLING_STAT_FIELDS = [['eventsPlayed','EVT'],['games','GM'],['pinfall','PINS'],['highGame','HI GM'],['titles','TITLES'],['top5','TOP 5'],['cashes','CASHES'],['earnings','EARNINGS'],['points','TOUR PTS']];
 const GOLF_STAT_FIELDS = [['eventsPlayed','EVT'],['cutsMade','CUTS'],['wins','W'],['top10','T10'],['roundsPlayed','RNDS'],['strokesTotal','STRK'],['earnings','EARNINGS'],['points','TOUR PTS']];
+
+
 
 
 function statGroupFor(sport, posKey) {
@@ -812,13 +953,16 @@ function updateCareerHighs(career, line) {
     });
 }
 
+
 /* ----------------------------------------------------------------------
    7. GAME STATLINE GENERATION
    ---------------------------------------------------------------------- */
 function r(min, max) { return Math.round(randFloat(min, max)); }
 
 
-function generateFootballLine(posKey, perf) {
+
+
+function generateFootballLine(posKey, perf, career) {
     const group = posInfo('football', posKey).group;
     const p = perf / 100;
     switch (group) {
@@ -826,10 +970,16 @@ function generateFootballLine(posKey, perf) {
             const completions = clamp(r(10, 18) + Math.round(p * 12), 4, 40);
             const attempts = completions + r(4, 10);
             const passYds = clamp(Math.round(completions * (6 + p * 6)) + r(-15, 25), 0, 480);
-            const passTD = p > 0.82 ? r(2, 4) : p > 0.6 ? r(1, 3) : r(0, 1);
-            // Realistic INT rates: good QBs throw ~1 INT per 30–40 attempts; bad QBs 1 per 15
-            const intChance = p > 0.82 ? 0.08 : p > 0.65 ? 0.18 : p > 0.45 ? 0.30 : 0.45;
-            const ints = (Math.random() < intChance) ? 1 : (p < 0.40 && Math.random() < 0.25 ? 1 : 0);
+            const passTD = p > 0.82 ? r(2, 3) + (Math.random() < 0.25 ? 1 : 0)
+                : p > 0.72 ? r(1, 2) + (Math.random() < 0.20 ? 1 : 0)
+                    : p > 0.60 ? r(1, 2)
+                        : r(0, 1);
+            const ageIntBonus = (career && career.age && career.age > 36)
+                ? (career.age - 36) * 0.08
+                : 0;
+            const intChance = p > 0.82 ? 0.50 : p > 0.65 ? 0.65 : p > 0.45 ? 0.82 : 0.95;
+            const adjustedIntChance = clamp(intChance + ageIntBonus, 0, 0.98);
+            const ints = (Math.random() < adjustedIntChance ? 1 : 0) + (p < 0.60 && Math.random() < 0.20 ? 1 : 0);
             const rushYds = clamp(r(-3, 10) + Math.round(p * 15), -5, 90);
             return { gp: 1, completions, attempts, passYds, passTD, ints, rushYds };
         }
@@ -892,10 +1042,12 @@ function generateBasketballLine(posKey, perf, career) {
     const isC = posKey === 'C';
     const isPF = posKey === 'PF';
 
+
     // Get tier for scaling
     const tierKey = (career && career.tier) ? career.tier : DEFAULT_TIER;
     const tier = CAREER_TIERS[tierKey] || CAREER_TIERS[DEFAULT_TIER];
     const statMult = tier.statMult || 1.0;
+
 
     // Prime/age modifier — players peak between 26–32
     let primeMult = 1.0;
@@ -910,20 +1062,25 @@ function generateBasketballLine(posKey, perf, career) {
         primeMult = clamp(primeMult, 0.45, 1.0);
     }
 
+
     const effective = p * statMult * primeMult;
+
 
     /* Occasional blowup (10%) or stinker (10%) */
     const gameRoll = Math.random();
     const gameModifier = gameRoll < 0.10 ? 1.35 : (gameRoll < 0.20 ? 0.60 : 1.0);
 
+
     /* FGA — guards shoot more volume */
     const baseFGA = isBig ? r(6, 10) : (isGuard ? r(8, 14) : r(7, 12));
     const fga = clamp(Math.round((baseFGA + effective * 6) * gameModifier), 1, 28);
+
 
     /* FG% — bigs shoot higher % (layups/dunks), guards lower */
     const fgPctBase = isBig ? (0.44 + effective * 0.14) : (0.38 + effective * 0.11);
     const fgPct = clamp(fgPctBase, 0.28, isBig ? 0.62 : 0.52);
     const fgm = clamp(Math.round(fga * fgPct), 0, fga);
+
 
     /* 3-point shots — guards shoot many, wings some, bigs very few
        Key fix: 3P% for a 99-rated player should be ~40-43%, not 35% */
@@ -944,12 +1101,15 @@ function generateBasketballLine(posKey, perf, career) {
     const tpa = clamp(Math.round(tpaBase * gameModifier), 0, 12);
     const tpm = clamp(Math.round(tpa * tp3Pct), 0, tpa);
 
+
     /* FT */
     const ftMade = clamp(Math.round((effective * 4 + r(0, 2)) * gameModifier), 0, 12);
+
 
     /* Points */
     const rawPts = (fgm - tpm) * 2 + tpm * 3 + ftMade;
     const pts = clamp(rawPts, 0, 55);
+
 
     /* Rebounds — POSITION REALISTIC
        A 6'0 PG with 99 rebounding shouldn't get 13+ rpg.
@@ -962,6 +1122,7 @@ function generateBasketballLine(posKey, perf, career) {
     else { /* PG */ rebBase = r(1, 2) + effective * 2; rebMax = 6; }
     const reb = clamp(Math.round(rebBase * (gameModifier > 1 ? 1.15 : 1.0)), 0, rebMax);
 
+
     /* Assists — POSITION REALISTIC
        A center with 99 passing shouldn't average 10 ast/game.
        Caps: PG ~14 max, SG ~7 max, SF ~6 max, PF ~4 max, C ~4 max */
@@ -972,8 +1133,10 @@ function generateBasketballLine(posKey, perf, career) {
     else { /* bigs */ astBase = r(0, 1) + effective * 1.5; astMax = 4; }
     const ast = clamp(Math.round(astBase * (gameModifier > 1 ? 1.1 : 1.0)), 0, astMax);
 
+
     /* Steals — guards steal more */
     const stl = clamp(r(0, 2) + (Math.random() < effective * 0.55 ? 1 : 0), 0, 5);
+
 
     /* Blocks — POSITION REALISTIC
        SF fix: should get occasional blocks, not zero.
@@ -984,6 +1147,7 @@ function generateBasketballLine(posKey, perf, career) {
     else if (isWing) { blkBase = Math.random() < (0.15 + effective * 0.35) ? 1 : 0; blkMax = 3; }
     else { blkBase = Math.random() < (0.08 + effective * 0.15) ? 1 : 0; blkMax = 2; }
     const blk = clamp(Math.round(blkBase * (gameModifier > 1 ? 1.1 : 1.0)), 0, blkMax);
+
 
     return { gp: 1, pts, reb, ast, stl, blk, fgm, fga, tpm, tpa };
 }
@@ -1027,6 +1191,8 @@ function formatIP(n) {
 }
 
 
+
+
 function simulateBowlingEvent(career) {
     const p = performanceScore(career) / 100;
     const games = 6;
@@ -1053,12 +1219,16 @@ function simulateGolfEvent(career) {
 }
 
 
+
+
 /* ----------------------------------------------------------------------
    8. TEAM LEAGUE ENGINE
    ---------------------------------------------------------------------- */
 function generateLeague(sport) {
     const shape = LEAGUE_SHAPE[sport];
     let teams = [];
+
+
 
 
     // Use the real teams if we have them mapped out
@@ -1098,6 +1268,8 @@ function generateLeague(sport) {
     }
 
 
+
+
     const schedule = buildSeasonSchedule(teams.map(t => t.id), shape.games);
     return { sport, teams, schedule, week: 0, season: 1, complete: false, playoffResult: null };
 }
@@ -1132,6 +1304,8 @@ function buildSeasonSchedule(teamIds, totalGames) {
     return allWeeks;
 }
 function teamById(league, id) { return league.teams.find(t => t.id === id); }
+
+
 
 
 function homeFieldEdge() { return 2.2; }
@@ -1191,6 +1365,8 @@ function playoffPicture(league) {
 function groupBy(arr, key) { const o = {}; arr.forEach(x => (o[x[key]] = o[x[key]] || []).push(x)); return o; }
 
 
+
+
 function simulateLeagueWeek(league, sport, userTeamId, userCareer) {
     if (league.week >= league.schedule.length) return null;
     const weekObj = league.schedule[league.week];
@@ -1230,6 +1406,8 @@ function simulateLeagueWeek(league, sport, userTeamId, userCareer) {
 }
 
 
+
+
 /* ----------------------------------------------------------------------
    9. TOUR ENGINE (bowling / golf)
    ---------------------------------------------------------------------- */
@@ -1248,6 +1426,8 @@ function generateRivals(sport) {
     return rivals;
 }
 function randNormal(mean, sd) { return mean + (rngNormal01() - 0.5) * 2 * sd * 1.7; }
+
+
 
 
 function generateTourSchedule(sport) {
@@ -1271,6 +1451,8 @@ function purseForRank(rank, fieldSize, sport) {
     return Math.round(top * Math.pow(scale, 2.1) / 100) * 100;
 }
 function pointsForRank(rank) { return clamp(Math.round(150 - rank * 1.6), 1, 150); }
+
+
 
 
 function simulateTourEvent(career) {
@@ -1308,6 +1490,8 @@ function simulateTourEvent(career) {
     const points = madeCut ? pointsForRank(place) : 1;
     return { place, tied: tiedAtSameMetric, fieldSize: field.length, earnings, points, madeCut, line: userLine, leaderboard: field.slice(0, 10) };
 }
+
+
 
 
 /* ----------------------------------------------------------------------
@@ -1358,7 +1542,7 @@ function isFullyMaxed(career) {
 }
 function genStatline(career, perf) {
     const sport = career.sport, pos = career.position || 'GEN';
-    if (sport === 'football') return generateFootballLine(pos, perf);
+    if (sport === 'football') return generateFootballLine(pos, perf, career);
     if (sport === 'basketball') return generateBasketballLine(pos, perf, career); // ← pass career
     if (sport === 'baseball') return generateBaseballLine(pos, perf);
 }
@@ -1380,6 +1564,8 @@ function statlineSummary(sport, posKey, line) {
     }
     return '';
 }
+
+
 
 
 /* ----------------------------------------------------------------------
@@ -1406,6 +1592,8 @@ function simulateHighSchoolGame(career) {
     saveState();
     return entry;
 }
+
+
 
 
 function generateCollegeOffers(n) {
@@ -1450,6 +1638,8 @@ function simulateCollegeGame(career) {
 }
 
 
+
+
 function archiveSeason(career, stageKey, label) {
     career.careerStatsLog.push({
         season: career.season, stage: stageKey, label,
@@ -1461,6 +1651,8 @@ function rollRetirementAge(sport) {
     const rules = RETIREMENT_RULES[sport];
     return randInt(rules.retireMin, rules.retireMax);
 }
+
+
 
 
 function runDraft(career) {
@@ -1492,6 +1684,8 @@ function runDraft(career) {
 }
 
 
+
+
 function runDraftBaseball(career) {
     const ov = career.overall;
     let round;
@@ -1500,12 +1694,15 @@ function runDraftBaseball(career) {
     else if (ov >= 67) round = randInt(7, 12);
     else round = randInt(13, 20);
 
+
     const pickNum = randInt(1, 30);
     const league = generateLeague('baseball');
     const team = weightedRandom(t => 1 / (t.rating + 1), league.teams);
 
+
     // Pick a real minor league affiliate
     const minorAffiliate = pick(REAL_MILB_TEAMS);
+
 
     career.draft = { round, pick: pickNum, teamName: team.name };
     archiveSeason(career, 'college', career.college.name);
@@ -1517,11 +1714,14 @@ function runDraftBaseball(career) {
     career.season = 1;
     career.seasonGameCount = 0;
 
+
     logHistory(career, `Drafted in Round ${round}, Pick ${pickNum} by the ${team.name}. Reporting to ${career.minors.affiliateName}.`);
     saveState();
     return career.draft;
 }
 function pick0(arr) { return arr[0]; }
+
+
 
 
 function simulateMinorsGame(career) {
@@ -1559,6 +1759,8 @@ function callUpToMajors(career) {
 }
 
 
+
+
 function declareTurnPro(career) {
     /* Guard: only archive college once */
     try {
@@ -1566,6 +1768,7 @@ function declareTurnPro(career) {
             archiveSeason(career, 'college', career.college.name);
         }
     } catch(e) { /* safe to ignore */ }
+
 
     career.tour = {
         rivals: generateRivals(career.sport),
@@ -1585,6 +1788,8 @@ function declareTurnPro(career) {
     logHistory(career, `Turned pro and earned a card on the ${SPORT_META[career.sport].leagueName}.`);
     saveState();
 }
+
+
 
 
 /* ----------------------------------------------------------------------
@@ -1624,6 +1829,8 @@ function simulateProGame(career) {
 }
 
 
+
+
 function playBracketRound(seeded) {
     const winners = [];
     const n = seeded.length;
@@ -1639,6 +1846,8 @@ function runConferenceBracket(conf, teams, shape, userTeamId, roundLog) {
     let bracket = seeded.slice(0, shape.directSeeds);
 
 
+
+
     if (shape.playInPool) {
         const pool = seeded.slice(shape.directSeeds, shape.directSeeds + shape.playInPool);
         let remaining = pool.slice();
@@ -1650,6 +1859,8 @@ function runConferenceBracket(conf, teams, shape, userTeamId, roundLog) {
         }
         if (remaining[0]) bracket.push(remaining[0]);
     }
+
+
 
 
     let byeTeams = bracket.slice(0, shape.byeCount);
@@ -1677,6 +1888,8 @@ function runConferenceBracket(conf, teams, shape, userTeamId, roundLog) {
 }
 
 
+
+
 function runPlayoffs(league, sport, userTeamId) {
     const shape = LEAGUE_SHAPE[sport];
     const picture = playoffPicture(league);
@@ -1686,6 +1899,8 @@ function runPlayoffs(league, sport, userTeamId) {
     }
     const roundLog = { userEliminated: null };
     const confChampions = conferenceStandings(league).map(({ conf, teams }) => ({ conf, champ: runConferenceBracket(conf, teams, shape, userTeamId, roundLog) }));
+
+
 
 
     let championResult;
@@ -1702,6 +1917,8 @@ function runPlayoffs(league, sport, userTeamId) {
     }
 
 
+
+
     const confChampIds = confChampions.map(c => c.champ.id);
     const wonIt = championResult.champion.id === userTeamId;
     const wonConference = confChampIds.includes(userTeamId);
@@ -1711,10 +1928,14 @@ function runPlayoffs(league, sport, userTeamId) {
     else summary = `Champion: ${championResult.champion.name}.`;
 
 
+
+
     /* Store this year's champion in the league history */
     if (!league.championHistory) league.championHistory = [];
     league.championHistory.push({ season: league.season || 1, name: championResult.champion.name });
     if (league.championHistory.length > 10) league.championHistory = league.championHistory.slice(-10);
+
+
 
 
     return {
@@ -1723,6 +1944,8 @@ function runPlayoffs(league, sport, userTeamId) {
         confChampIds, userEliminatedRound: roundLog.userEliminated,
     };
 }
+
+
 
 
 /* ----------------------------------------------------------------------
@@ -1740,6 +1963,8 @@ const OFFENSE_GROUPS_FB = ['passer', 'rusher', 'receiver'];
 const DEFENSE_GROUPS_FB = ['dline', 'front7', 'secondary'];
 function isOffensePosition(sport, posKey) { return sport !== 'football' || OFFENSE_GROUPS_FB.includes(posInfo(sport, posKey).group); }
 function isDefensePosition(sport, posKey) { return sport !== 'football' || DEFENSE_GROUPS_FB.includes(posInfo(sport, posKey).group); }
+
+
 
 
 function awardLabels(sport) {
@@ -1772,19 +1997,25 @@ function buildAwardLeaderboard(career, key) {
     if (conferenceSplit) pool = pool.filter(t => t.conference === myTeam.conference);
 
 
+
+
     let userVal;
     if (key === 'mip') {
         const prior = career.priorSeasonGrade != null ? career.priorSeasonGrade : computeSeasonGrade(career);
         userVal = 50 + (computeSeasonGrade(career) - prior);
     } else if (key === 'opoy' && career.position === 'QB') {
-        userVal = computeSeasonGrade(career) * 0.65;
+        userVal = computeSeasonGrade(career) * 0.90;
     } else {
         userVal = computeSeasonGrade(career);
     }
 
 
+
+
     const entries = [];
-    const poolSize = career.sport === 'football' ? randInt(1000, 1500) : (career.sport === 'basketball' ? randInt(300, 500) : pool.length * 25);
+    const poolSize = career.sport === 'football' ? randInt(500, 750) : (career.sport === 'basketball' ? randInt(300, 500) : pool.length * 25);
+
+
 
 
     const tier = CAREER_TIERS[career.tier || DEFAULT_TIER] || CAREER_TIERS[DEFAULT_TIER];
@@ -1811,10 +2042,14 @@ function wasBestOnOwnTeam(career) {
 }
 
 
+
+
 function finalizeSeasonAwards(career, playoffResult) {
     const sport = career.sport;
     const labels = awardLabels(sport);
     const items = [];
+
+
 
 
     awardKeysForSport(sport).forEach(key => {
@@ -1854,6 +2089,8 @@ function finalizeSeasonAwards(career, playoffResult) {
     });
 
 
+
+
     /* Playoff awards */
     if (playoffResult && playoffResult.madePlayoffs) {
         if (playoffResult.wonIt) {
@@ -1872,6 +2109,8 @@ function finalizeSeasonAwards(career, playoffResult) {
     }
 
 
+
+
     career.awardsLog.push({ season: career.season, age: career.age, team: teamById(career.proLeague, career.team).name, items });
     items.filter(i => i.won).forEach(i => {
         career.careerAwardCounts[i.label] = (career.careerAwardCounts[i.label] || 0) + 1;
@@ -1880,6 +2119,8 @@ function finalizeSeasonAwards(career, playoffResult) {
         logHistory(career, `Season ${career.season} awards: ${items.filter(i => i.won).map(i => i.label).join(', ')}.`);
     }
 }
+
+
 
 
 function shouldRetireNext(career) {
@@ -1929,6 +2170,8 @@ function retireCareer(career) {
 }
 
 
+
+
 function startNewProSeason(career) {
     const league = career.proLeague;
     const team = teamById(league, career.team);
@@ -1953,6 +2196,8 @@ function startNewProSeason(career) {
     logHistory(career, `Season ${career.season} begins with the ${team.name} (age ${career.age}).`);
     saveState();
 }
+
+
 
 
 function requestTrade(career) {
@@ -1982,6 +2227,8 @@ function requestTrade(career) {
         return { ok: true, accepted: false };
     }
 }
+
+
 
 
 /* ----------------------------------------------------------------------
@@ -2045,12 +2292,16 @@ function startNewTourSeason(career) {
 }
 
 
+
+
 /* ----------------------------------------------------------------------
    14. UI SHELL — ROUTER, MODAL, TOAST
    ---------------------------------------------------------------------- */
 const appEl = () => document.getElementById('app');
 const modalRoot = () => document.getElementById('modalRoot');
 const toastRoot = () => document.getElementById('toastRoot');
+
+
 
 
 function navigate(hash) {
@@ -2069,9 +2320,13 @@ function parseRoute() {
 }
 
 
+
+
 function router() {
     const parts = parseRoute();
     closeModal();
+
+
 
 
     if (parts.length === 0) return renderHome();
@@ -2082,11 +2337,15 @@ function router() {
 }
 
 
+
+
 window.addEventListener('hashchange', () => {
     window.scrollTo(0, 0);
     router();
 });
 window.addEventListener('hashchange', router);
+
+
 
 
 function toast(msg, type) {
@@ -2114,6 +2373,8 @@ function closeModal() {
 }
 
 
+
+
 document.addEventListener('click', (e) => {
     const overlayClose = e.target.closest('[data-action="modal-close-overlay"]');
     if (overlayClose && e.target === overlayClose) { closeModal(); return; }
@@ -2125,8 +2386,12 @@ document.addEventListener('click', (e) => {
 });
 
 
+
+
 function qs(id) { return document.getElementById(id); }
 function todayYear() { return new Date().getFullYear(); }
+
+
 
 
 /* ----------------------------------------------------------------------
@@ -2159,6 +2424,8 @@ const ICON_TRASH = `<svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h
 const ICON_EDIT = `<svg viewBox="0 0 24 24" fill="none"><path d="M14.7 4.3l5 5L8 21H3v-5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const ICON_CHEVRON = `<svg viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const ICON_PLUS = `<svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`;
+
+
 
 
 function stageLabel(career) {
@@ -2229,6 +2496,8 @@ function miniAvatar(career, size) {
 }
 
 
+
+
 /* ----------------------------------------------------------------------
    16. HOME PAGE
    ---------------------------------------------------------------------- */
@@ -2244,6 +2513,8 @@ function renderHome() {
   </header>`;
 
 
+
+
     const tiles = SPORTS.map(sport => {
         const sm = SPORT_META[sport];
         const count = getCareers(sport).length;
@@ -2256,9 +2527,13 @@ function renderHome() {
     }).join('');
 
 
+
+
     pageShell('', `${header}<div class="sportGrid">${tiles}</div>
     <p class="footnote">All progress is saved automatically in this browser. Install to your homescreen for the full app feel — look for "Add to Home Screen" in your browser's share menu.</p>`);
 }
+
+
 
 
 /* ----------------------------------------------------------------------
@@ -2272,7 +2547,11 @@ function renderSportList(sport) {
     const careers = getCareers(sport);
 
 
+
+
     const header = topBar(sm.label, { back: true, sub: `${sm.icon} ${careers.length} career slot${careers.length === 1 ? '' : 's'}` });
+
+
 
 
     const cards = careers.map(c => `
@@ -2297,10 +2576,14 @@ function renderSportList(sport) {
     </div>`).join('');
 
 
+
+
     const addTile = `<button class="newCareerTile" data-action="goto-new-career" data-sport="${sport}">
     <span class="newCareerTile__plus">${ICON_PLUS}</span>
     <span>Start a New ${sm.label} Career</span>
   </button>`;
+
+
 
 
     const empty = careers.length === 0 ? `<div class="emptyState">
@@ -2309,14 +2592,20 @@ function renderSportList(sport) {
     </div>` : '';
 
 
+
+
     pageShell(header, `<div class="careerList">${empty}${cards}${addTile}</div>`);
 }
+
+
 
 
 /* ----------------------------------------------------------------------
    18. CHARACTER CREATOR
    ---------------------------------------------------------------------- */
 let creatorState = null;
+
+
 
 
 function defaultCreatorState(sport) {
@@ -2349,6 +2638,8 @@ function randomizeCreatorState(sport) {
 }
 
 
+
+
 function renderCreate(sport) {
     if (!SPORTS.includes(sport)) return renderHome();
     setAccent(sport);
@@ -2360,10 +2651,14 @@ function renderCreate(sport) {
 }
 
 
+
+
 function refreshCreatorForm(sport) {
     qs('creatorRoot').innerHTML = creatorFormHTML(sport);
     bindCreatorEvents(sport);
 }
+
+
 
 
 function creatorFormHTML(sport) {
@@ -2372,8 +2667,12 @@ function creatorFormHTML(sport) {
     const age = ageFromBirthday(cs.birthday, todayYear());
 
 
+
+
     /* Resolve active color for swatch highlighting */
     const activeColorName = resolveHairColorName(cs.appearance.hairColor);
+
+
 
 
     const positionSection = HAS_POSITIONS[sport] ? `
@@ -2387,6 +2686,8 @@ function creatorFormHTML(sport) {
           </button>`).join('')}
       </div>
     </section>` : '';
+
+
 
 
     return `
@@ -2403,6 +2704,8 @@ function creatorFormHTML(sport) {
     })}</div>
         <button type="button" class="btn btn--ghost btn--block" data-action="creator-randomize" data-sport="${sport}">🎲 Randomize Everything</button>
       </div>
+
+
 
 
       <form class="creatorForm" id="creatorForm" novalidate>
@@ -2442,7 +2745,11 @@ function creatorFormHTML(sport) {
         </section>
 
 
+
+
         ${positionSection}
+
+
 
 
         <section class="formSection">
@@ -2457,6 +2764,8 @@ function creatorFormHTML(sport) {
           </label>
           <p class="formSection__hint">Height and weight nudge your starting attributes — bigger builds trend toward power, leaner builds trend toward speed.</p>
         </section>
+
+
 
 
         <section class="formSection">
@@ -2488,6 +2797,8 @@ function creatorFormHTML(sport) {
         </section>
 
 
+
+
         <section class="formSection">
           <h2 class="formSection__title">Career Path</h2>
           <p class="formSection__hint">This shapes how dominant your player can become — it affects peak stats, how hard it is to win awards, and how often you have monster games vs. quiet ones. You can't change this after creation.</p>
@@ -2501,12 +2812,16 @@ function creatorFormHTML(sport) {
         </section>
 
 
+
+
         <button type="button" class="btn btn--primary btn--block btn--lg" id="submitCreate" data-action="creator-submit" data-sport="${sport}">
           Create Career &amp; Start in High School
         </button>
       </form>
     </div>`;
 }
+
+
 
 
 function refreshAvatarPreview(sport) {
@@ -2521,6 +2836,8 @@ function refreshAvatarPreview(sport) {
         weightLb: cs.weightLb,
     });
 }
+
+
 
 
 function bindCreatorEvents(sport) {
@@ -2547,6 +2864,8 @@ function bindCreatorEvents(sport) {
         refreshAvatarPreview(sport);
     });
 }
+
+
 
 
 /* ----------------------------------------------------------------------
@@ -2583,6 +2902,8 @@ function timelineHTML(career) {
 }
 
 
+
+
 const TAB_DEFS = (sport) => [
     { key: 'overview', label: 'Overview' },
     { key: 'attributes', label: 'Attributes' },
@@ -2593,12 +2914,16 @@ const TAB_DEFS = (sport) => [
 ];
 
 
+
+
 function renderCareerHub(sport, id, tab) {
     const career = getCareer(sport, id);
     if (!career) { toast('That career could not be found.', 'error'); return renderSportList(sport); }
     setAccent(sport);
     document.title = `${career.name} · Career Mode`;
     const sm = SPORT_META[sport];
+
+
 
 
     const headerRight = `<span class="ovrPill ovrPill--lg">${career.overall} <small>OVR</small></span>`;
@@ -2608,10 +2933,14 @@ function renderCareerHub(sport, id, tab) {
     });
 
 
+
+
     const tabs = TAB_DEFS(sport).map(t => `
     <button class="tabBtn ${tab === t.key ? 'tabBtn--active' : ''}" data-action="goto-career-tab" data-sport="${sport}" data-id="${id}" data-tab="${t.key}">${t.label}</button>
   `).join('');
     const tabBar = `<nav class="tabBar">${tabs}</nav>`;
+
+
 
 
     let content = '';
@@ -2624,9 +2953,13 @@ function renderCareerHub(sport, id, tab) {
     else content = renderOverviewTab(career);
 
 
+
+
     pageShell(header, `${tabBar}<div class="tabContent">${content}</div>`);
     if (tab === 'edit') bindEditTabAfterRender(career);
 }
+
+
 
 
 /* ----------------------------------------------------------------------
@@ -2635,6 +2968,8 @@ function renderCareerHub(sport, id, tab) {
 function renderOverviewTab(career) {
     const sport = career.sport;
     const sm = SPORT_META[sport];
+
+
 
 
     const bioCard = `<div class="bioCard">
@@ -2651,18 +2986,28 @@ function renderOverviewTab(career) {
   </div>`;
 
 
+
+
     const team = teamNameForCareer(career);
     const teamLine = `<div class="currentTeamLine"><span class="currentTeamLine__label">Currently with</span><span class="currentTeamLine__name">${escapeHtml(team)}</span></div>`;
 
 
+
+
     const actionBlock = renderPrimaryAction(career);
+
+
 
 
     const recentGames = career.gameLog.slice(0, 6).map(g => gameLogRowHTML(career, g)).join('') ||
         `<p class="emptyHint">No games simulated yet — your first action awaits above.</p>`;
 
 
+
+
     const historyFeed = career.history.slice(0, 8).map(h => `<div class="historyRow"><span class="historyRow__dot"></span><span>${escapeHtml(h.text)}</span></div>`).join('');
+
+
 
 
     return `
@@ -2682,6 +3027,8 @@ function renderOverviewTab(career) {
 }
 
 
+
+
 function gameLogRowHTML(career, g) {
     let resultTag = '';
     if (g.type === 'tour') {
@@ -2697,6 +3044,8 @@ function gameLogRowHTML(career, g) {
     ${resultTag}
   </div>`;
 }
+
+
 
 
 function renderPrimaryAction(career) {
@@ -2789,6 +3138,8 @@ function actionCard(title, sub, buttons) {
 }
 
 
+
+
 /* ----------------------------------------------------------------------
    21. ATTRIBUTES TAB
    ---------------------------------------------------------------------- */
@@ -2817,6 +3168,8 @@ function renderAttributesTab(career) {
     }).join('');
 
 
+
+
     const declineBanner = declining ? `<div class="declineBanner">
       <strong>Father Time has arrived.</strong> At age ${career.age}, skill points can no longer raise these attributes — Conditioning is the only thing still slowing the decline. Attributes will keep eroding each season until you retire (mandatory by age ${career.retirementAge}).
     </div>` : '';
@@ -2824,6 +3177,7 @@ function renderAttributesTab(career) {
     const capNote = career.overall >= tierCap
         ? ` Your <strong>${CAREER_TIERS[career.tier || DEFAULT_TIER].label}</strong> career path caps your overall at <strong>${tierCap}</strong> — attributes are locked at their current ceiling.`
         : ` Your <strong>${CAREER_TIERS[career.tier || DEFAULT_TIER].label}</strong> path caps overall at <strong>${tierCap}</strong>.`;
+
 
     return `
     <div class="ovrBanner">
@@ -2895,6 +3249,8 @@ function renderConditioningSection(career) {
 }
 
 
+
+
 /* ----------------------------------------------------------------------
    22. TEAM / TOUR TAB
    ---------------------------------------------------------------------- */
@@ -2902,6 +3258,8 @@ function renderTeamTab(career) {
     if (career.sport === 'bowling' || career.sport === 'golf') return renderTourTab(career);
     return renderTeamSportTab(career);
 }
+
+
 
 
 function renderTeamSportTab(career) {
@@ -2916,6 +3274,8 @@ function renderTeamSportTab(career) {
     const isMinors = career.stage === 'minors';
 
 
+
+
     const recordCard = `<div class="teamRecordCard" style="--team-accent:${SPORT_META[career.sport].accent}">
     <div class="teamRecordCard__name">${escapeHtml(myTeam.name)}</div>
     <div class="teamRecordCard__sub">${myTeam.conference} · ${myTeam.division} Division</div>
@@ -2924,7 +3284,11 @@ function renderTeamSportTab(career) {
   </div>`;
 
 
+
+
     const minorsNote = isMinors ? `<p class="formSection__hint">You're currently grinding in the minors with ${career.minors.affiliateName}. The standings below belong to your parent organization — keep performing well to earn the call-up.</p>` : '';
+
+
 
 
     const tradeSection = (!isMinors && HAS_TRADES[career.sport]) ? `
@@ -2935,6 +3299,8 @@ function renderTeamSportTab(career) {
         <button class="btn btn--secondary" data-action="request-trade">Request a Trade</button>
       </div>
     </section>` : '';
+
+
 
 
     const scheduleRows = league.schedule.map((wk, i) => {
@@ -2958,11 +3324,15 @@ function renderTeamSportTab(career) {
     }).join('');
 
 
+
+
     const divStandings = divisionStandings(league).map(d => `
     <div class="standingsGroup">
       <h3 class="standingsGroup__title">${d.key}</h3>
       ${standingsTableHTML(d.teams, career.team)}
     </div>`).join('');
+
+
 
 
     const picture = playoffPicture(league);
@@ -2978,11 +3348,15 @@ function renderTeamSportTab(career) {
     </div>`).join('');
 
 
+
+
     const champHistory = (league.championHistory || []).slice().reverse();
     const champSection = champHistory.length ? `<section class="block">
       <h2 class="block__title">Recent Champions</h2>
       <div class="gameLogList">${champHistory.map(c => `<div class="gameLogRow"><div class="gameLogRow__main"><span class="gameLogRow__label">Season ${c.season}</span><span class="gameLogRow__summary">${escapeHtml(c.name)}</span></div></div>`).join('')}</div>
     </section>` : '';
+
+
 
 
     return `
@@ -3013,6 +3387,8 @@ function standingsTableHTML(teams, myTeamId) {
 }
 
 
+
+
 function renderTourTab(career) {
     const sm = SPORT_META[career.sport];
     if (!career.tour) {
@@ -3036,6 +3412,8 @@ function renderTourTab(career) {
     }).join('');
 
 
+
+
     const totalPoints = career.seasonStats.points || 0;
     const rivalsRanked = tour.rivals.map(rv => ({ name: rv.name, points: rv.seasonPoints || 0 }))
         .concat([{ name: career.name + ' (You)', points: totalPoints, me: true }])
@@ -3043,10 +3421,14 @@ function renderTourTab(career) {
     const myRank = rivalsRanked.findIndex(r => r.me) + 1;
 
 
+
+
     const rankTable = `<table class="standingsTable"><thead><tr><th>#</th><th>Name</th><th>Points</th></tr></thead><tbody>
     ${rivalsRanked.slice(0, 10).map((r, i) => `<tr class="${r.me ? 'standingsTable__me' : ''}"><td>${i + 1}</td><td>${escapeHtml(r.name)}</td><td>${r.points}</td></tr>`).join('')}
     ${myRank > 10 ? `<tr class="standingsTable__me"><td>${myRank}</td><td>${escapeHtml(career.name)} (You)</td><td>${totalPoints}</td></tr>` : ''}
   </tbody></table>`;
+
+
 
 
     return `
@@ -3066,6 +3448,8 @@ function renderTourTab(career) {
     </section>
   `;
 }
+
+
 
 
 /* ----------------------------------------------------------------------
@@ -3109,6 +3493,8 @@ function renderTrophyCase(career) {
         : `<p class="emptyHint">No hardware yet — keep simulating seasons.</p>`;
 
 
+
+
     const seasonRows = career.awardsLog.slice().reverse().map(log => {
         const won = log.items.filter(i => i.won);
         if (!won.length) return '';
@@ -3121,6 +3507,8 @@ function renderTrophyCase(career) {
     }).join('');
 
 
+
+
     return `
     <section class="block">
       <h2 class="block__title">Career Trophy Case</h2>
@@ -3129,6 +3517,8 @@ function renderTrophyCase(career) {
     ${seasonRows ? `<section class="block"><h2 class="block__title">Season-by-Season</h2><div class="gameLogList">${seasonRows}</div></section>` : ''}
   `;
 }
+
+
 
 
 /* ----------------------------------------------------------------------
@@ -3166,6 +3556,7 @@ function formatStatVal(key, val) {
 }
 const STAT_AGGREGATE_MAX = { highGame: true };
 
+
 function careerHighsHTML(career) {
     if (!career.careerHighs || !Object.keys(career.careerHighs).length) return '';
     const sport = career.sport;
@@ -3190,6 +3581,7 @@ function careerHighsHTML(career) {
   </section>`;
 }
 
+
 function renderStatsTab(career) {
     const sport = career.sport, pos = career.position || 'GEN';
     const fields = statFieldsFor(sport, pos);
@@ -3202,6 +3594,8 @@ function renderStatsTab(career) {
     const rows = [...historicalRows, { label: currentLabel, totals: career.seasonStats, current: true }];
 
 
+
+
     const careerTotals = {};
     fields.forEach(([k]) => careerTotals[k] = 0);
     rows.forEach(rw => fields.forEach(([k]) => {
@@ -3210,7 +3604,11 @@ function renderStatsTab(career) {
     }));
 
 
+
+
     const derivedHeaders = derivedColumns(sport, pos, careerTotals).map(([l]) => l);
+
+
 
 
     function tableRowHTML(rw) {
@@ -3223,6 +3621,8 @@ function renderStatsTab(career) {
     }
 
 
+
+
     const table = `<div class="tableScroll"><table class="statsTable">
     <thead><tr><th>Season</th>${derivedHeaders.map(l => `<th class="statsTable__headline">${l}</th>`).join('')}${fields.map(([, l]) => `<th>${l}</th>`).join('')}</tr></thead>
     <tbody>
@@ -3230,6 +3630,7 @@ function renderStatsTab(career) {
       <tr class="statsTable__totals"><td>Career Totals</td>${derivedColumns(sport, pos, careerTotals).map(([, v]) => `<td>${v}</td>`).join('')}${fields.map(([k]) => `<td>${formatStatVal(k, careerTotals[k])}</td>`).join('')}</tr>
     </tbody>
   </table></div>`;
+
 
     return `
     <section class="block">
@@ -3240,6 +3641,8 @@ function renderStatsTab(career) {
     ${careerHighsHTML(career)}
   `;
 }
+
+
 
 
 /* ----------------------------------------------------------------------
@@ -3255,6 +3658,8 @@ function bindEditTabAfterRender(career) {
 function editFormHTML(career) {
     const sm = SPORT_META[career.sport];
     const activeColorName = resolveHairColorName(career.appearance.hairColor);
+
+
 
 
     return `
@@ -3347,10 +3752,14 @@ function bindEditEvents(career) {
 }
 
 
+
+
 /* ----------------------------------------------------------------------
    25. MODAL CONTENT GENERATORS
    ---------------------------------------------------------------------- */
 let pendingCollegeOffers = null;
+
+
 
 
 function modalShell(title, bodyHtml, footerHtml) {
@@ -3358,6 +3767,8 @@ function modalShell(title, bodyHtml, footerHtml) {
     <div class="modal__body">${bodyHtml}</div>
     ${footerHtml ? `<div class="modal__foot">${footerHtml}</div>` : ''}`;
 }
+
+
 
 
 function collegeOffersModalHTML(career, offers) {
@@ -3370,6 +3781,8 @@ function collegeOffersModalHTML(career, offers) {
     </button>`).join('');
     return modalShell('College Offers', `<p class="modal__hint">Pick where ${escapeHtml(career.name)} commits. Prestige affects nothing mechanically — it's all bragging rights.</p><div class="offerGrid">${cards}</div>`);
 }
+
+
 
 
 function draftRevealModalHTML(career, isBaseball) {
@@ -3433,11 +3846,15 @@ function deleteConfirmModalHTML(sport, id, name) {
 }
 
 
+
+
 /* ----------------------------------------------------------------------
    26. ACTION DISPATCHER
    ---------------------------------------------------------------------- */
 function handleAction(action, btn) {
     const sport = currentSportFromRoute();
+
+
 
 
     switch (action) {
@@ -3458,6 +3875,8 @@ function handleAction(action, btn) {
         case 'close-and-refresh': closeModal(); rerenderCurrentRoute(); return;
 
 
+
+
         /* ---- delete ---- */
         case 'delete-career-confirm': {
             const c = getCareer(btn.dataset.sport, btn.dataset.id);
@@ -3471,6 +3890,8 @@ function handleAction(action, btn) {
             navigate(`#/sport/${btn.dataset.sport}`);
             return;
         }
+
+
 
 
         /* ---- creator ---- */
@@ -3504,6 +3925,8 @@ function handleAction(action, btn) {
         }
 
 
+
+
         /* ---- edit ---- */
         case 'edit-pick-skin': {
             const c = currentCareerFromRoute();
@@ -3534,6 +3957,8 @@ function handleAction(action, btn) {
         }
 
 
+
+
         /* ---- attributes ---- */
         case 'upgrade-attr': {
             const c = currentCareerFromRoute();
@@ -3556,6 +3981,8 @@ function handleAction(action, btn) {
         }
 
 
+
+
         /* ---- high school / college ---- */
         case 'sim-hs-game': { const c = currentCareerFromRoute(); simulateHighSchoolGame(c); rerenderCurrentRoute(); return; }
         case 'open-college-offers': { const c = currentCareerFromRoute(); openModal(collegeOffersModalHTML(c, generateCollegeOffers(4))); return; }
@@ -3571,10 +3998,14 @@ function handleAction(action, btn) {
         case 'sim-college-game': { const c = currentCareerFromRoute(); simulateCollegeGame(c); rerenderCurrentRoute(); return; }
 
 
+
+
         /* ---- draft / turn pro ---- */
         case 'do-draft': { const c = currentCareerFromRoute(); runDraft(c); openModal(draftRevealModalHTML(c, false)); return; }
         case 'do-draft-baseball': { const c = currentCareerFromRoute(); runDraftBaseball(c); openModal(draftRevealModalHTML(c, true)); return; }
         case 'do-turnpro': { const c = currentCareerFromRoute(); declareTurnPro(c); openModal(turnProModalHTML(c)); return; }
+
+
 
 
         /* ---- minors ---- */
@@ -3593,6 +4024,8 @@ function handleAction(action, btn) {
             rerenderCurrentRoute();
             return;
         }
+
+
 
 
         /* ---- pro team sports ---- */
@@ -3648,6 +4081,8 @@ function handleAction(action, btn) {
         }
 
 
+
+
         /* ---- tour (bowling / golf) ---- */
         case 'sim-tour-event': {
             const c = currentCareerFromRoute();
@@ -3668,9 +4103,13 @@ function handleAction(action, btn) {
         case 'start-new-tour-season': { const c = currentCareerFromRoute(); startNewTourSeason(c); rerenderCurrentRoute(); toast(`Season ${c.season} underway!`, 'success'); return; }
 
 
+
+
         default: return;
     }
 }
+
+
 
 
 /* ----------------------------------------------------------------------
