@@ -448,7 +448,7 @@ function computeOverall(attributes, sport, posKey) {
         const primaryAttrs = new Set(allAttrs.slice(0, 6));
         let weightedSum = 0, totalWeight = 0;
         Object.entries(attributes).forEach(([k, v]) => {
-            const weight = primaryAttrs.has(k) ? 2 : 1;
+            const weight = primaryAttrs.has(k) ? 3 : 0.5;
             weightedSum += v * weight;
             totalWeight += weight;
         });
@@ -580,7 +580,9 @@ function unlockBadge(career, badgeId) {
     saveState();
     return true;
 }
-function skillPointsEarned(stage, perf, sport) {
+const TIER_PROGRESSION_MULT = { goat: 1.6, allstar: 1.35, star: 1.15, starter: 1.0, roleplayer: 0.85, benchwarmer: 0.7 };
+
+function skillPointsEarned(stage, perf, sport, tier) {
     const stageBase = { highschool: 1, college: 1, minors: 1, pro: 2, tour: 2 }[stage] ?? 1;
     const bonusMax = { highschool: 1, college: 1, minors: 1, pro: 2, tour: 2 }[stage] ?? 1;
     let pts = stageBase + Math.round((perf / 100) * bonusMax);
@@ -588,6 +590,7 @@ function skillPointsEarned(stage, perf, sport) {
         const scale = SEASON_REFERENCE_GAMES[sport] / LEAGUE_SHAPE[sport].games;
         pts = Math.max(1, Math.round(pts * scale));
     }
+    pts = Math.max(1, Math.round(pts * (TIER_PROGRESSION_MULT[tier] ?? 1)));
     return pts;
 }
 
@@ -951,9 +954,11 @@ function generateBasketballLine(posKey, perf, career) {
     const threeAttr = clamp(((attrs['Three Point'] ?? 65) - 25) / 74, 0, 1);
     const athleticismAttr = clamp(((attrs['Athleticism'] ?? 65) - 25) / 74, 0, 1);
     const ballHandlingAttr = clamp(((attrs['Ball Handling'] ?? 65) - 25) / 74, 0, 1);
+    const blockingAttr = clamp(((attrs['Shot Blocking'] ?? 40) - 25) / 74, 0, 1);
+
 
     const gameRoll = Math.random();
-    const gameModifier = gameRoll < 0.10 ? 1.35 : (gameRoll < 0.20 ? 0.60 : 1.0);
+    const gameModifier = gameRoll < 0.02 ? 2.1 : (gameRoll < 0.12 ? 1.35 : (gameRoll < 0.22 ? 0.60 : 1.0));
 
     /* FGA — guards shoot more volume; ball handling adds shot creation */
     const baseFGA = isBig ? r(8, 13) : (isGuard ? r(10, 17) : r(9, 15));
@@ -967,13 +972,13 @@ function generateBasketballLine(posKey, perf, career) {
     let tpaBase, tp3Pct;
     if (isBig) {
         tpaBase = isPF ? (Math.random() < 0.3 ? r(1, 2) : 0) : (Math.random() < 0.1 ? 1 : 0);
-        tp3Pct = clamp(0.28 + threeAttr * 0.16, 0.20, 0.40);
+        tp3Pct = clamp(0.28 + threeAttr * 0.10, 0.20, 0.38);
     } else if (isGuard) {
         tpaBase = clamp(r(4, 8) + Math.round(threeAttr * 5), 0, 13);
-        tp3Pct = clamp(0.30 + threeAttr * 0.16, 0.24, 0.46);
+        tp3Pct = clamp(0.29 + threeAttr * 0.14, 0.24, 0.43);
     } else {
         tpaBase = clamp(r(3, 6) + Math.round(threeAttr * 4), 0, 10);
-        tp3Pct = clamp(0.30 + threeAttr * 0.15, 0.24, 0.45);
+        tp3Pct = clamp(0.28 + threeAttr * 0.13, 0.24, 0.42);
     }
     const tpa = clamp(Math.round(tpaBase * gameModifier), 0, 13);
     const tpm = clamp(Math.round(tpa * tp3Pct), 0, tpa);
@@ -995,20 +1000,20 @@ function generateBasketballLine(posKey, perf, career) {
     /* Assists — now scales hard off the Passing attribute, since that's the
        whole point of investing skill points there as a PG */
     let astBase, astMax;
-    if (isPG) { astBase = r(2, 5) + effective * 3 + passingAttr * 8; astMax = 16; }
-    else if (posKey === 'SG') { astBase = r(1, 3) + effective * 2 + passingAttr * 4; astMax = 9; }
-    else if (isWing) { astBase = r(0, 3) + effective * 1.5 + passingAttr * 3.5; astMax = 8; }
-    else { /* bigs */ astBase = r(0, 2) + effective * 1 + passingAttr * 2.5; astMax = 6; }
-    const ast = clamp(Math.round(astBase * (gameModifier > 1 ? 1.1 : 1.0)), 0, astMax);
+    if (isPG)        { astBase = r(1, 3) + effective * 2 + passingAttr * 6.5; astMax = 12; }
+    else if (posKey === 'SG') { astBase = r(0, 2) + effective * 1.5 + passingAttr * 4; astMax = 8; }
+    else if (isWing) { astBase = r(1, 3) + effective * 1.5 + passingAttr * 5; astMax = 10; }
+    else             { astBase = r(0, 2) + effective * 1 + passingAttr * 2.5; astMax = 6; }
+    const ast = clamp(Math.round(astBase * (gameModifier > 1 ? 1.1 : 1.0)), 0, astMax);   // ← ADD THIS LINE
 
     const stl = clamp(r(0, 2) + (Math.random() < effective * 0.55 ? 1 : 0), 0, 5);
 
     let blkBase, blkMax;
-    if (isC) { blkBase = r(0, 2) + effective * 2.5; blkMax = 8; }
-    else if (isPF) { blkBase = r(0, 1) + effective * 1.2; blkMax = 4; }
-    else if (isWing) { blkBase = Math.random() < (0.15 + effective * 0.35) ? 1 : 0; blkMax = 3; }
-    else { blkBase = Math.random() < (0.08 + effective * 0.15) ? 1 : 0; blkMax = 2; }
-    const blk = clamp(Math.round(blkBase * (gameModifier > 1 ? 1.1 : 1.0)), 0, blkMax);
+    if (isC)      { blkBase = 0.3 + blockingAttr * 3.2; blkMax = 9; }
+    else if (isPF){ blkBase = 0.15 + blockingAttr * 2.0; blkMax = 6; }
+    else if (isWing){ blkBase = 0.05 + blockingAttr * 1.7; blkMax = 4; }
+    else          { blkBase = 0.02 + blockingAttr * 1.0; blkMax = 3; } // guards
+    const blk = clamp(Math.round(blkBase + randFloat(-0.6, 0.7)), 0, blkMax);
 
     return { gp: 1, pts, reb, ast, stl, blk, fgm, fga, tpm, tpa };
 }
@@ -1394,7 +1399,7 @@ function logHistory(career, text) { career.history.unshift({ text, t: Date.now()
 function logGame(career, entry) { career.gameLog.unshift(entry); career.gameLog = career.gameLog.slice(0, 80); }
 function awardPoints(career, stage, perf, sport) {
     if (isFullyMaxed(career)) return 0;
-    const pts = skillPointsEarned(stage, perf, sport);
+    const pts = skillPointsEarned(stage, perf, sport, career.tier);
     career.skillPoints += pts;
     return pts;
 }
@@ -1543,10 +1548,27 @@ function runDraft(career) {
     } else {
         logHistory(career, `Went undrafted, but signed as a free agent with the ${team.name}.`);
     }
+    planSeasonAvailability(career);
     saveState();
     return career.draft;
 }
-
+const SEASON_MISS_CONFIG = { basketball: {min:6,max:12}, football: {min:0,max:3}, baseball: {min:3,max:10} };
+const SEASON_OUT_CHANCE = 0.035;
+function planSeasonAvailability(career) {
+    const cfg = SEASON_MISS_CONFIG[career.sport];
+    if (!cfg || !career.proLeague) { career.missedWeeks = []; career.seasonOut = false; return; }
+    const totalGames = career.proLeague.schedule.length;
+    if (Math.random() < SEASON_OUT_CHANCE) {
+        career.seasonOut = true;
+        career.missedWeeks = Array.from({length: totalGames}, (_, i) => i);
+        return;
+    }
+    career.seasonOut = false;
+    const missCount = randInt(cfg.min, cfg.max);
+    const weeks = [];
+    while (weeks.length < missCount) { const w = randInt(0, totalGames - 1); if (!weeks.includes(w)) weeks.push(w); }
+    career.missedWeeks = weeks;
+}
 
 
 
@@ -1617,11 +1639,11 @@ function callUpToMajors(career) {
     career.age = AGE_MILESTONES.baseball.proStart;
     career.retirementAge = rollRetirementAge('baseball');
     career.seasonPerfSum = 0; career.seasonPerfGames = 0;
+    planSeasonAvailability(career);
     const team = teamById(career.proLeague, career.team);
     logHistory(career, `CALLED UP to the Majors by the ${team.name}!`);
     saveState();
 }
-
 
 
 
@@ -1659,64 +1681,81 @@ function declareTurnPro(career) {
 /* ----------------------------------------------------------------------
    12. PRO TEAM-SPORT SEASON ENGINE
    ---------------------------------------------------------------------- */
-function simulateProGame(career) {
-    const league = career.proLeague;
-    if (league.complete) return null;
-    const result = simulateLeagueWeek(league, career.sport, career.team, career);
-    if (!result) return null;
-    const line = genStatline(career, result.perf);
-    addStatTotals(career.seasonStats, line);
-    updateCareerHighs(career, line);
-    const summary = statlineSummary(career.sport, career.position, line);
-    const opp = teamById(league, result.opponentId);
-    const myTeam = teamById(league, career.team);
-    const entry = {
-        type: 'pro', label: `${result.isHome ? 'vs' : '@'} ${opp.name}`, opponent: opp.name,
-        won: result.won, tied: result.tied, score: `${result.teamScore}-${result.oppScore}`,
-        summary, perf: result.perf, t: Date.now(),
-    };
-    logGame(career, entry);
-    const pts = awardPoints(career, 'pro', result.perf, career.sport);
-    career.seasonGameCount++;
-    career.seasonPerfSum += result.perf; career.seasonPerfGames++;
-    logHistory(career, `${myTeam.name} ${result.won ? 'beat' : result.tied ? 'tied' : 'fell to'} ${opp.name} ${entry.score} — ${summary} (+${pts} skill pts)`);
-    let seasonOver = false, playoffResult = null;
-    if (league.complete) {
-        seasonOver = true;
-        playoffResult = runPlayoffs(league, career.sport, career.team);
-        league.playoffResult = playoffResult;
-        finalizeSeasonAwards(career, playoffResult);
-        logHistory(career, `Regular season complete. ${playoffResult.summary}`);
+    const CHAMPIONSHIP_TIER_BOOST = { goat: 9, allstar: 5, star: 3, starter: 1, roleplayer: 0, benchwarmer: 0 };
+    function simulateProGame(career) {
+        const league = career.proLeague;
+        if (league.complete) return null;
+
+        if (career.missedWeeks && career.missedWeeks.includes(league.week)) {
+            simulateLeagueWeek(league, career.sport, null, career);
+            const entry = { type: 'pro', label: 'Did not play', dnp: true, won: null, tied: null, score: null,
+                summary: career.seasonOut ? 'Out for the season with injury.' : 'Rested / sidelined this game.', perf: null, t: Date.now() };
+            logGame(career, entry);
+            let seasonOver = false, playoffResult = null;
+            if (league.complete) {
+                seasonOver = true;
+                playoffResult = runPlayoffs(league, career.sport, career.team, career.tier);
+                league.playoffResult = playoffResult;
+                finalizeSeasonAwards(career, playoffResult);
+            }
+            saveState();
+            return { entry, seasonOver, playoffResult };
+        }
+
+        const result = simulateLeagueWeek(league, career.sport, career.team, career);
+        if (!result) return null;
+        const line = genStatline(career, result.perf);
+        addStatTotals(career.seasonStats, line);
+        updateCareerHighs(career, line);
+        const summary = statlineSummary(career.sport, career.position, line);
+        const opp = teamById(league, result.opponentId);
+        const myTeam = teamById(league, career.team);
+        const entry = {
+            type: 'pro', label: `${result.isHome ? 'vs' : '@'} ${opp.name}`, opponent: opp.name,
+            won: result.won, tied: result.tied, score: `${result.teamScore}-${result.oppScore}`,
+            summary, perf: result.perf, t: Date.now(),
+        };
+        logGame(career, entry);
+        const pts = awardPoints(career, 'pro', result.perf, career.sport);
+        career.seasonGameCount++;
+        career.seasonPerfSum += result.perf; career.seasonPerfGames++;
+        logHistory(career, `${myTeam.name} ${result.won ? 'beat' : result.tied ? 'tied' : 'fell to'} ${opp.name} ${entry.score} — ${summary} (+${pts} skill pts)`);
+        let seasonOver = false, playoffResult = null;
+        if (league.complete) {
+            seasonOver = true;
+            playoffResult = runPlayoffs(league, career.sport, career.team, career.tier);
+            league.playoffResult = playoffResult;
+            finalizeSeasonAwards(career, playoffResult);
+            logHistory(career, `Regular season complete. ${playoffResult.summary}`);
+        }
+        saveState();
+        return { entry, seasonOver, playoffResult };
     }
-    saveState();
-    return { entry, seasonOver, playoffResult };
-}
 
 
 
 
-function playBracketRound(seeded, sport) {
+function playBracketRound(seeded, sport, userTeamId, tierBoost) {
     const winners = [];
     const n = seeded.length;
     for (let i = 0; i < n / 2; i++) {
         const a = seeded[i], b = seeded[n - 1 - i];
-        const pA = winProbability(a.rating + 1.5, b.rating, sport);
+        const aBoost = a.id === userTeamId ? (tierBoost || 0) : 0;
+        const bBoost = b.id === userTeamId ? (tierBoost || 0) : 0;
+        const pA = winProbability(a.rating + 1.5 + aBoost, b.rating + bBoost, sport);
         winners.push(Math.random() < pA ? a : b);
     }
     return winners;
 }
-function runConferenceBracket(conf, teams, shape, userTeamId, roundLog, sport) {
+function runConferenceBracket(conf, teams, shape, userTeamId, roundLog, sport, tierBoost) {
     const seeded = teams.map((t, i) => ({ id: t.id, name: t.name, rating: t.rating, seed: i + 1 }));
     let bracket = seeded.slice(0, shape.directSeeds);
-
-
-
 
     if (shape.playInPool) {
         const pool = seeded.slice(shape.directSeeds, shape.directSeeds + shape.playInPool);
         let remaining = pool.slice();
         while (remaining.length > 1) {
-            const winners = playBracketRound(remaining, sport)
+            const winners = playBracketRound(remaining, sport, userTeamId, tierBoost)
             const eliminated = remaining.filter(t => !winners.includes(t));
             eliminated.forEach(t => { if (t.id === userTeamId) roundLog.userEliminated = `${conf} Play-In`; });
             remaining = winners;
@@ -1724,16 +1763,13 @@ function runConferenceBracket(conf, teams, shape, userTeamId, roundLog, sport) {
         if (remaining[0]) bracket.push(remaining[0]);
     }
 
-
-
-
     let byeTeams = bracket.slice(0, shape.byeCount);
     let playingTeams = bracket.slice(shape.byeCount);
     const roundNames = shape.byeCount > 0 ? ['Wild Card Round', 'Divisional Round', 'Conference Championship'] : ['Divisional Round', 'Conference Championship'];
     let remaining = bracket;
     let roundIdx = 0;
     if (playingTeams.length > 1) {
-        const winners = playBracketRound(playingTeams, sport);
+        const winners = playBracketRound(playingTeams, sport, userTeamId, tierBoost);
         const eliminated = playingTeams.filter(t => !winners.includes(t));
         eliminated.forEach(t => { if (t.id === userTeamId) roundLog.userEliminated = `${conf} ${roundNames[roundIdx]}`; });
         remaining = [...byeTeams, ...winners].sort((a, b) => a.seed - b.seed);
@@ -1742,7 +1778,7 @@ function runConferenceBracket(conf, teams, shape, userTeamId, roundLog, sport) {
         remaining = bracket;
     }
     while (remaining.length > 1) {
-        const winners = playBracketRound(remaining, sport)
+        const winners = playBracketRound(remaining, sport, userTeamId, tierBoost)
         const eliminated = remaining.filter(t => !winners.includes(t));
         eliminated.forEach(t => { if (t.id === userTeamId) roundLog.userEliminated = `${conf} ${roundNames[clamp(roundIdx, 0, roundNames.length - 1)]}`; });
         remaining = winners.sort((a, b) => a.seed - b.seed);
@@ -1754,23 +1790,23 @@ function runConferenceBracket(conf, teams, shape, userTeamId, roundLog, sport) {
 
 
 
-function runPlayoffs(league, sport, userTeamId) {
+function runPlayoffs(league, sport, userTeamId, tier) {
     const shape = LEAGUE_SHAPE[sport];
     const picture = playoffPicture(league);
     const userInPicture = picture.some(p => p.inPlayoffs.some(t => t.id === userTeamId) || p.playIn.some(t => t.id === userTeamId));
     if (!userInPicture) {
         return { madePlayoffs: false, summary: 'Missed the playoffs this season.', champion: null, finalsLoserId: null, confChampIds: [] };
     }
+    const tierBoost = CHAMPIONSHIP_TIER_BOOST[tier || DEFAULT_TIER] ?? 0;
     const roundLog = { userEliminated: null };
-    const confChampions = conferenceStandings(league).map(({ conf, teams }) => ({ conf, champ: runConferenceBracket(conf, teams, shape, userTeamId, roundLog, sport) }));
-
-
-
+    const confChampions = conferenceStandings(league).map(({ conf, teams }) => ({ conf, champ: runConferenceBracket(conf, teams, shape, userTeamId, roundLog, sport, tierBoost) }));
 
     let championResult;
     if (confChampions.length === 2) {
         const [a, b] = confChampions;
-        const pA = winProbability(a.champ.rating + 1, b.champ.rating, sport);
+        const aBoost = a.champ.id === userTeamId ? tierBoost : 0;
+        const bBoost = b.champ.id === userTeamId ? tierBoost : 0;
+        const pA = winProbability(a.champ.rating + 1 + aBoost, b.champ.rating + bBoost, sport);
         const aWins = Math.random() < pA;
         const champion = aWins ? a.champ : b.champ;
         const runnerUp = aWins ? b.champ : a.champ;
@@ -1881,6 +1917,17 @@ function isEligibleForAward(career, key) {
     if (key === 'sixthMan') return sport === 'basketball' && career.overall < 85;
     return true;
 }
+function dpoyPositionWeight(sport, posKey) {
+    if (sport === 'basketball') return ['C','PF'].includes(posKey) ? 1.0 : posKey === 'SF' ? 0.82 : 0.58;
+    if (sport === 'football') return ['DL','LB'].includes(posKey) ? 1.0 : 0.78;
+    return 1.0;
+}
+function getAwardBoard(career, key) {
+    const cacheKey = `${career.season}-${career.seasonGameCount}`;
+    if (!career.awardCache || career.awardCache.key !== cacheKey) career.awardCache = { key: cacheKey, boards: {} };
+    if (!career.awardCache.boards[key]) career.awardCache.boards[key] = buildAwardLeaderboard(career, key);
+    return career.awardCache.boards[key];
+}
 function buildAwardLeaderboard(career, key) {
     const sport = career.sport;
     const league = career.proLeague;
@@ -1901,28 +1948,18 @@ function buildAwardLeaderboard(career, key) {
     } else {
         userVal = computeSeasonGrade(career) + computeStatBoost(career);
     }
-
-
-
-
-    const entries = [];
-    const poolSize = career.sport === 'football' ? randInt(400, 600) : (career.sport === 'basketball' ? randInt(150, 250) : pool.length * 20);
+    if (key === 'dpoy') userVal *= dpoyPositionWeight(sport, career.position);
 
 
 
 
     const tier = CAREER_TIERS[career.tier || DEFAULT_TIER] || CAREER_TIERS[DEFAULT_TIER];
-    for (let i = 0; i < poolSize; i++) {
-        let grade;
-        let t = pick(pool);
-        if (key === 'mip') grade = 50 + clamp(randInt(-8, 18), -30, 40);
-        else {
-            /* awardBias > 1 means more entries score higher → harder to win */
-            const bias = Math.round((tier.awardBias - 1) * 12);
-            grade = clamp(t.rating + randInt(-20 + bias, 18 + bias), 35, 99);
-        }
-        entries.push({ name: fictionalStarName(t), teamName: t.name, isUser: false, grade });
-    }
+    const bias = Math.round((tier.awardBias - 1) * 12);
+    const entries = pool.map(t => {
+        const grade = key === 'mip' ? 50 + clamp(randInt(-8, 18), -30, 40)
+            : clamp(t.rating + randInt(-20 + bias, 18 + bias), 35, 99);
+        return { name: fictionalStarName(t), teamName: t.name, isUser: false, grade };
+    });
     entries.push({ name: career.name, teamName: myTeam.name, isUser: true, grade: userVal });
     entries.sort((a, b) => b.grade - a.grade);
     const rank = entries.findIndex(e => e.isUser) + 1;
@@ -1947,31 +1984,38 @@ function finalizeSeasonAwards(career, playoffResult) {
 
     awardKeysForSport(sport).forEach(key => {
         if (!isEligibleForAward(career, key)) return;
-        const board = buildAwardLeaderboard(career, key);
+        const board = getAwardBoard(career, key);
+        const total = board.total;
         if (key === 'allstar') {
-            const won = board.rank <= 25;
+            const won = board.rank <= Math.max(1, Math.ceil(total * 0.35));
             items.push({ key, label: labels.allstar, won, rank: board.rank, total: board.total });
             if (sport === 'basketball') {
                 let teamTier = null;
-                if (board.rank <= 5) teamTier = '1st Team All-NBA';
-                else if (board.rank <= 10) teamTier = '2nd Team All-NBA';
-                else if (board.rank <= 15) teamTier = '3rd Team All-NBA';
+                if (board.rank <= Math.max(1, Math.ceil(total * 0.10))) teamTier = '1st Team All-NBA';
+                else if (board.rank <= Math.max(1, Math.ceil(total * 0.20))) teamTier = '2nd Team All-NBA';
+                else if (board.rank <= Math.max(1, Math.ceil(total * 0.30))) teamTier = '3rd Team All-NBA';
                 if (teamTier) items.push({ key: 'allnba', label: teamTier, won: true, rank: board.rank, total: board.total });
             }
         } else if (key === 'dpoy' && sport === 'basketball') {
             /* Defensive player of the year — also determines All-Defensive team placement */
-            const won = board.rank === 1;
+            const won = resolveMarqueeAwardWin(career, 'dpoy', labels[key], board.rank === 1);
             items.push({ key, label: labels[key], won, rank: board.rank, total: board.total });
             let defTeam = null;
-            if (board.rank <= 5) defTeam = labels.allDefFirst;
-            else if (board.rank <= 10) defTeam = labels.allDefSecond;
-            else if (board.rank <= 15) defTeam = labels.allDefThird;
+            if (board.rank <= Math.max(1, Math.ceil(total * 0.10))) defTeam = labels.allDefFirst;
+            else if (board.rank <= Math.max(1, Math.ceil(total * 0.20))) defTeam = labels.allDefSecond;
+            else if (board.rank <= Math.max(1, Math.ceil(total * 0.30))) defTeam = labels.allDefThird;
             if (defTeam) items.push({ key: 'alldef', label: defTeam, won: true, rank: board.rank, total: board.total });
+        } else if (key === 'dpoy') {
+            const won = resolveMarqueeAwardWin(career, 'dpoy', labels[key] || key, board.rank === 1);
+            items.push({ key, label: labels[key] || key, won, rank: board.rank, total: board.total });
+        } else if (key === 'mvp') {
+            const won = resolveMarqueeAwardWin(career, 'mvp', labels[key] || key, board.rank === 1);
+            items.push({ key, label: labels[key] || key, won, rank: board.rank, total: board.total });
         } else if (key === 'roty' && sport === 'basketball') {
             const won = board.rank === 1;
             items.push({ key, label: labels[key], won, rank: board.rank, total: board.total });
-            /* Top 10 rookies make the All-Rookie team */
-            if (board.rank <= 10) items.push({ key: 'allrookie', label: labels.allRookie, won: true, rank: board.rank, total: board.total });
+            /* Top rookies make the All-Rookie team */
+            if (board.rank <= Math.max(1, Math.ceil(total * 0.33))) items.push({ key: 'allrookie', label: labels.allRookie, won: true, rank: board.rank, total: board.total });
         } else if (key === 'sixthMan') {
             const won = board.rank === 1;
             items.push({ key, label: labels.sixthMan, won, rank: board.rank, total: board.total });
@@ -2012,7 +2056,18 @@ function finalizeSeasonAwards(career, playoffResult) {
         logHistory(career, `Season ${career.season} awards: ${items.filter(i => i.won).map(i => i.label).join(', ')}.`);
     }
 }
-
+const MVP_TIER_CAP = { goat: 6, allstar: 2, star: 1, starter: 1, roleplayer: 0, benchwarmer: 0 };
+const DPOY_TIER_CAP = { goat: 4, allstar: 2, star: 1, starter: 0, roleplayer: 0, benchwarmer: 0 };
+function resolveMarqueeAwardWin(career, key, label, provisionalWin) {
+    if (!career.awardStreaks) career.awardStreaks = {};
+    if (!provisionalWin) { career.awardStreaks[key] = 0; return false; }
+    const cap = (key === 'mvp' ? MVP_TIER_CAP : DPOY_TIER_CAP)[career.tier || DEFAULT_TIER] ?? 1;
+    if ((career.careerAwardCounts[label] || 0) >= cap) return false;
+    const streak = career.awardStreaks[key] || 0;
+    const won = Math.random() < clamp(1 - streak * 0.32, 0.12, 1);
+    career.awardStreaks[key] = won ? streak + 1 : 0;
+    return won;
+}
 
 
 
@@ -2088,6 +2143,7 @@ t.rating = clamp(t.rating + randInt(-4, 4) + pullToAvg, 55, 96);
     /* Reset trade cooldown so prior season's game count doesn't block new season requests */
     if (career.trade) career.trade.lastRequestGameCount = -999;
     career.seasonStats = newStatTotals(career.sport, career.position || 'GEN');
+    planSeasonAvailability(career);
     logHistory(career, `Season ${career.season} begins with the ${team.name} (age ${career.age}).`);
     saveState();
 }
@@ -3369,7 +3425,7 @@ function renderLiveAwardRace(career, labels) {
         return `<section class="block"><h2 class="block__title">This Season's Race</h2><p class="emptyHint">No award races apply to you this season.</p></section>`;
     }
     const cards = keys.map(key => {
-        const board = buildAwardLeaderboard(career, key);
+        const board = getAwardBoard(career, key);
         const top10 = board.entries.slice(0, 10);
         const rows = top10.map((e, i) => `<tr class="${e.isUser ? 'standingsTable__me' : ''}"><td>${i + 1}</td><td>${escapeHtml(e.name)}${e.isUser ? '' : ` <span class="awardRace__team">· ${escapeHtml(e.teamName)}</span>`}</td></tr>`).join('');
         const extra = board.rank > 10 ? `<tr class="standingsTable__me"><td>${board.rank}</td><td>${escapeHtml(career.name)} (You)</td></tr>` : '';
