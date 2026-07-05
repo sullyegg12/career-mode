@@ -3225,7 +3225,7 @@ function renderHome() {
 
 
     pageShell('', `${header}<div class="sportGrid">${tiles}</div>
-    <p class="footnote">All progress is saved automatically in this browser. Install to your homescreen for the full app feel — look for "Add to Home Screen" in your browser's share menu.</p>`);
+    <p class="footnote"></p>`);
 }
 
 
