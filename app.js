@@ -217,20 +217,35 @@ const SPORTS = ['football', 'basketball', 'baseball', 'bowling', 'golf'];
 const SPORT_META = {
     football:  { label: 'Football',   icon: '🏈', accent: '#3FA34D', accentSoft: 'rgba(63,163,77,.16)',
         leagueName: 'National Football League', leagueAbbr: 'NFL', draftLabel: 'NFL Draft',
+        leagueNameF: "Women's National Football League", leagueAbbrF: 'WNFL', draftLabelF: 'WNFL Draft',
         proTermPlural: 'pro teams', unit: 'games' },
     basketball:{ label: 'Basketball', icon: '🏀', accent: '#E2832C', accentSoft: 'rgba(226,131,44,.16)',
         leagueName: 'National Basketball Association', leagueAbbr: 'NBA', draftLabel: 'NBA Draft',
+        leagueNameF: "Women's National Basketball Association", leagueAbbrF: 'WNBA', draftLabelF: 'WNBA Draft',
         proTermPlural: 'pro teams', unit: 'games' },
     baseball:  { label: 'Baseball',   icon: '⚾', accent: '#C0503D', accentSoft: 'rgba(192,80,61,.16)',
         leagueName: 'Major League Baseball', leagueAbbr: 'MLB', draftLabel: 'MLB Draft',
+        leagueNameF: "Women's Major League Baseball", leagueAbbrF: 'WMLB', draftLabelF: 'WMLB Draft',
         proTermPlural: 'pro teams', unit: 'games' },
     bowling:   { label: 'Bowling',    icon: '🎳', accent: '#3E8FE8', accentSoft: 'rgba(62,143,232,.16)',
         leagueName: 'Professional Bowlers Association', leagueAbbr: 'PBA', draftLabel: null,
+        leagueNameF: "Professional Women's Bowling Association", leagueAbbrF: 'PWBA', draftLabelF: null,
         proTermPlural: 'tour stops', unit: 'tournaments' },
     golf:      { label: 'Golf',       icon: '⛳', accent: '#1F8A5F', accentSoft: 'rgba(31,138,95,.16)',
         leagueName: 'Professional Golfers Association', leagueAbbr: 'PGA', draftLabel: null,
+        leagueNameF: "Professional Women's Golf Association", leagueAbbrF: 'PWGA', draftLabelF: null,
         proTermPlural: 'tour stops', unit: 'tournaments' },
 };
+function leagueMetaFor(sport, gender) {
+    const sm = SPORT_META[sport];
+    const isFemale = gender === 'female';
+    return {
+        ...sm,
+        leagueName: isFemale ? sm.leagueNameF : sm.leagueName,
+        leagueAbbr: isFemale ? sm.leagueAbbrF : sm.leagueAbbr,
+        draftLabel: isFemale ? sm.draftLabelF : sm.draftLabel,
+    };
+}
 
 
 
@@ -328,6 +343,14 @@ const PRE_PRO_GAME_COUNTS = {
     basketball: { hs: 23, college: 32 },
     baseball:   { hs: 30, college: 48 },
 };
+const ROSTER_POSITION_QUOTAS = {
+    basketball: { PG: 3, SG: 3, SF: 3, PF: 3, C: 3 },
+    baseball:   { SP: 5, RP: 8, C: 2, '1B': 1, '2B': 1, '3B': 1, SS: 1, OF: 3, DH: 4 },
+    football:   { QB: 3, RB: 4, WR: 6, TE: 3, OL: 8, DL: 8, LB: 8, CB: 5, S: 5, K: 1 },
+};
+const OFFENSE_POSITIONS_FB = ['QB', 'RB', 'WR', 'TE', 'OL'];
+const DEFENSE_POSITIONS_FB = ['DL', 'LB', 'CB', 'S'];
+const SPECIAL_POSITIONS_FB = ['K'];
 
 
 
@@ -445,10 +468,16 @@ let _suspendSave = false;
 function saveState() {
     if (_suspendSave) return;
     try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE));
+        const json = JSON.stringify(STATE, (key, value) => {
+            /* Don't persist regenerable caches — they're rebuilt on demand
+               and just bloat the save file for no benefit. */
+            if (key === '_boardCache' || key === '_leaderCache') return undefined;
+            return value;
+        });
+        localStorage.setItem(STORAGE_KEY, json);
     } catch (e) {
         console.error('Could not save progress', e);
-        toast('Could not save — your browser storage may be full.', 'error');
+        toast('Could not save — your browser storage may be full. Try deleting an old career.', 'error');
     }
 }
 function withSaveSuspended(fn) {
@@ -1293,6 +1322,38 @@ function simulateGolfEvent(career) {
 /* ----------------------------------------------------------------------
    8. TEAM LEAGUE ENGINE
    ---------------------------------------------------------------------- */
+function generateRosterForTeam(sport, teamRating, usedNames) {
+    const quotas = ROSTER_POSITION_QUOTAS[sport];
+    const roster = [];
+    if (!quotas) {
+        const size = ROSTER_SIZE[sport] || 15;
+        for (let i = 0; i < size; i++) {
+            let name;
+            do { name = randomFullName(Math.random() < 0.5 ? 'male' : 'female'); } while (usedNames.has(name));
+            usedNames.add(name);
+            roster.push({ name, position: 'GEN', rating: clamp(Math.round(randNormal(teamRating, 8)), 40, 99), age: randInt(21, 36) });
+        }
+        return roster;
+    }
+    Object.entries(quotas).forEach(([pos, count]) => {
+        for (let i = 0; i < count; i++) {
+            let name;
+            do { name = randomFullName(Math.random() < 0.5 ? 'male' : 'female'); } while (usedNames.has(name));
+            usedNames.add(name);
+            roster.push({ name, position: pos, rating: clamp(Math.round(randNormal(teamRating, 8)), 40, 99), age: randInt(21, 36) });
+        }
+    });
+    return roster;
+}
+function insertUserIntoRoster(team, career) {
+    if (!team.roster) team.roster = [];
+    team.roster = team.roster.filter(p => !p.isUser);
+    const pos = career.position || 'GEN';
+    const idx = team.roster.findIndex(p => p.position === pos);
+    const userEntry = { name: career.name, position: pos, isUser: true };
+    if (idx >= 0) team.roster.splice(idx, 1, userEntry);
+    else team.roster.push(userEntry);
+}
 function generateLeague(sport) {
     const shape = LEAGUE_SHAPE[sport];
     let teams = [];
@@ -1339,26 +1400,8 @@ function generateLeague(sport) {
             };
         });
     }
-
-
-
-
-
-
-
-
-    const rosterSize = ROSTER_SIZE[sport] || 15;
     const usedNames = new Set();
-    teams.forEach(t => {
-        t.roster = [];
-        for (let i = 0; i < rosterSize; i++) {
-            let name;
-            do { name = randomFullName(Math.random() < 0.5 ? 'male' : 'female'); } while (usedNames.has(name));
-            usedNames.add(name);
-            const pos = HAS_POSITIONS[sport] ? pick(positionList(sport)) : 'GEN';
-            t.roster.push({ name, rating: clamp(Math.round(randNormal(t.rating, 8)), 40, 99), position: pos });
-        }
-    });
+    teams.forEach(t => { t.roster = generateRosterForTeam(sport, t.rating, usedNames); });
     const schedule = buildSeasonSchedule(teams.map(t => t.id), shape.games);
     return { sport, teams, schedule, week: 0, season: 1, complete: false, playoffResult: null };
 }
@@ -1798,18 +1841,42 @@ function rollRetirementAge(sport) {
 
 
 
+const DRAFT_SHAPE = {
+    football:  { rounds: 7, picksPerRound: 32 },
+    basketball:{ rounds: 2, picksPerRound: 30 },
+    baseball:  { rounds: 7, picksPerRound: 30 },
+};
+function buildDraftOrder(league) {
+    /* Worst record picks first. Before any season exists, fall back to
+       lowest team rating as a proxy for "worst team." */
+    const ranked = league.teams.slice().sort((a, b) => {
+        const aG = a.wins + a.losses + a.ties, bG = b.wins + b.losses + b.ties;
+        if (aG > 0 && bG > 0) return winPct(a) - winPct(b);
+        return a.rating - b.rating;
+    });
+    return ranked;
+}
+function pickSlotForTier(sport, tier, shape) {
+    const totalPicks = shape.rounds * shape.picksPerRound;
+    if (tier === 'goat') return randInt(1, 5);
+    if (tier === 'allstar') return randInt(1, 15);
+    if (tier === 'star') return randInt(1, shape.picksPerRound); // likely round 1
+    if (sport === 'basketball' && tier === 'benchwarmer') return randInt(shape.picksPerRound + 1, totalPicks);
+    return randInt(1, totalPicks);
+}
 function runDraft(career) {
-    const ov = career.overall;
-    let round;
-    if (ov >= 88) round = 1; else if (ov >= 80) round = 2; else if (ov >= 73) round = 3;
-    else if (ov >= 67) round = randInt(4, 5); else round = randInt(6, 7);
-    const pickNum = randInt(1, 32);
+    const shape = DRAFT_SHAPE[career.sport];
     const league = generateLeague(career.sport);
-    const team = weightedRandom(t => 1 / (t.rating + 1), league.teams);
-    career.draft = { round, pick: pickNum, drafted: ov >= 60 || Math.random() < 0.9, teamName: team.name };
+    const order = buildDraftOrder(league);
+    const overallPick = pickSlotForTier(career.sport, career.tier || DEFAULT_TIER, shape);
+    const round = Math.ceil(overallPick / shape.picksPerRound);
+    const pickInRound = ((overallPick - 1) % shape.picksPerRound) + 1;
+    const team = order[pickInRound - 1]; // approximation: same team order repeats each round
+    career.draft = { round, pick: pickInRound, overallPick, drafted: true, teamName: team.name };
     archiveSeason(career, 'college', career.college.name);
     career.proLeague = league;
     career.team = team.id;
+    insertUserIntoRoster(team, career);
     career.seasonStats = newStatTotals(career.sport, career.position || 'GEN');
     career.stage = 'pro';
     career.season = 1;
@@ -1817,11 +1884,7 @@ function runDraft(career) {
     career.seasonPerfSum = 0; career.seasonPerfGames = 0;
     career.age = AGE_MILESTONES[career.sport].proStart;
     career.retirementAge = rollRetirementAge(career.sport);
-    if (career.draft.drafted) {
-        logHistory(career, `Drafted in Round ${round}, Pick ${pickNum} by the ${team.name}!`);
-    } else {
-        logHistory(career, `Went undrafted, but signed as a free agent with the ${team.name}.`);
-    }
+    logHistory(career, `Drafted in Round ${round}, Pick ${pickInRound} (#${overallPick} overall) by the ${team.name}!`);
     planSeasonAvailability(career);
     saveState();
     return career.draft;
@@ -1901,6 +1964,7 @@ function runDraftBaseball(career) {
     archiveSeason(career, 'college', career.college.name);
     career.proLeague = league;
     career.team = team.id;
+    insertUserIntoRoster(team, career);
     career.minors = { affiliateName: `${minorAffiliate} (AAA)`, gamesPlayed: 0, games: [], level: 'AAA' };
     career.seasonStats = newStatTotals('baseball', career.position);
     career.stage = 'minors';
@@ -2778,7 +2842,9 @@ function requestTrade(career) {
         const choices = league.teams.filter(t => t.id !== career.team);
         const newTeam = pick(choices);
         const oldTeam = teamById(league, career.team);
+        oldTeam.roster = (oldTeam.roster || []).filter(p => !p.isUser);
         career.team = newTeam.id;
+        insertUserIntoRoster(newTeam, career);
         logHistory(career, `TRADE: Moved from the ${oldTeam.name} to the ${newTeam.name}.`);
         saveState();
         return { ok: true, accepted: true, team: newTeam };
@@ -2977,6 +3043,18 @@ document.addEventListener('click', (e) => {
     if (action === 'modal-close-overlay') return;
     handleAction(action, btn, e);
 });
+
+/* Desktop mice only send vertical wheel deltas — translate that into
+   horizontal scroll whenever hovering the tab bar so trackpad-only
+   behavior isn't required to see hidden tabs. */
+document.addEventListener('wheel', (e) => {
+    const tabBar = e.target.closest('.tabBar');
+    if (!tabBar) return;
+    if (tabBar.scrollWidth <= tabBar.clientWidth) return; // nothing to scroll
+    if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return; // already horizontal input, let it pass through
+    e.preventDefault();
+    tabBar.scrollLeft += e.deltaY;
+}, { passive: false });
 
 
 
@@ -3621,6 +3699,7 @@ const TAB_DEFS = (sport) => [
     { key: 'overview', label: 'Overview' },
     { key: 'attributes', label: 'Attributes' },
     { key: 'team', label: (sport === 'bowling' || sport === 'golf') ? 'Tour' : 'Team' },
+    ...(HAS_TRADES[sport] ? [{ key: 'roster', label: 'Roster' }] : []),
     ...(HAS_TRADES[sport] ? [{ key: 'playoffs', label: 'Playoffs' }] : []),
     ...(HAS_TRADES[sport] ? [{ key: 'leaders', label: 'Leaders' }] : []),
     ...(HAS_TRADES[sport] ? [{ key: 'awards', label: 'Awards' }] : []),
@@ -3678,6 +3757,7 @@ function renderCareerHub(sport, id, tab) {
     if (tab === 'overview') content = renderOverviewTab(career);
     else if (tab === 'attributes') content = renderAttributesTab(career);
     else if (tab === 'team') content = renderTeamTab(career);
+    else if (tab === 'roster') content = renderRosterTab(career);
     else if (tab === 'playoffs') content = renderPlayoffsTab(career);
     else if (tab === 'leaders') content = renderLeadersTab(career);
     else if (tab === 'awards') content = renderAwardsTab(career);
@@ -3856,7 +3936,7 @@ function renderPrimaryAction(career) {
         case 'pro': {
             const league = career.proLeague;
             if (league.complete) {
-                if (league.playoffs && league.playoffs.stage !== 'done') {
+                if (league.playoffs && league.playoffs.madePlayoffs && league.playoffs.stage !== 'done') {
                     return actionCard(`Regular Season Complete`, `Head to the Playoffs tab to work through the bracket round by round before starting next season.`, [{ label: 'Go to Playoffs', action: 'goto-career-tab', data: { sport: career.sport, id: career.id, tab: 'playoffs' } }]);
                 }
                 const hardCap = HARD_RETIREMENT_AGE[career.sport];
@@ -4055,6 +4135,50 @@ function renderConditioningSection(career) {
 function renderTeamTab(career) {
     if (career.sport === 'bowling' || career.sport === 'golf') return renderTourTab(career);
     return renderTeamSportTab(career);
+}
+
+
+function renderRosterTab(career) {
+    if (!career.proLeague) {
+        return `<div class="emptyState"><span class="emptyState__icon">${SPORT_META[career.sport].icon}</span><p>Your roster appears here once you're drafted.</p></div>`;
+    }
+    const league = career.proLeague;
+    const team = teamById(league, career.team);
+    const roster = (team.roster || []).map(p => p.isUser
+        ? { ...p, overall: career.overall, age: career.age }
+        : { ...p, overall: p.rating, age: p.age });
+
+    function positionGroupHTML(positions) {
+        return positions.map(pos => {
+            const players = roster.filter(p => p.position === pos).sort((a, b) => b.overall - a.overall);
+            if (!players.length) return '';
+            const rows = players.map(p => `<div style="display:flex;align-items:center;gap:8px;padding:6px 4px;${p.isUser ? 'background:var(--accent-soft);border-radius:8px;' : ''}">
+        <span style="width:34px;opacity:.6;font-size:.75rem;">${pos}</span>
+        <span style="flex:1;">${escapeHtml(p.name)}${p.isUser ? ' (You)' : ''}</span>
+        <span style="opacity:.6;font-size:.85rem;">${p.age}y</span>
+        <span style="font-weight:700;min-width:28px;text-align:right;">${p.overall}</span>
+      </div>`).join('');
+            return `<div class="standingsGroup"><h3 class="standingsGroup__title">${pos} (${players.length})</h3>${rows}</div>`;
+        }).join('');
+    }
+
+    let body;
+    if (career.sport === 'football') {
+        body = `
+      <section class="block"><h2 class="block__title">Offense</h2>${positionGroupHTML(OFFENSE_POSITIONS_FB)}</section>
+      <section class="block"><h2 class="block__title">Defense</h2>${positionGroupHTML(DEFENSE_POSITIONS_FB)}</section>
+      <section class="block"><h2 class="block__title">Special Teams</h2>${positionGroupHTML(SPECIAL_POSITIONS_FB)}</section>`;
+    } else {
+        const positions = Object.keys(ROSTER_POSITION_QUOTAS[career.sport] || {});
+        body = `<section class="block"><h2 class="block__title">Roster (${roster.length})</h2>${positionGroupHTML(positions)}</section>`;
+    }
+
+    return `
+    <div class="teamRecordCard" style="--team-accent:${SPORT_META[career.sport].accent}">
+      <div class="teamRecordCard__name">${escapeHtml(team.name)}</div>
+      <div class="teamRecordCard__sub">Full Roster</div>
+    </div>
+    ${body}`;
 }
 
 
@@ -4511,14 +4635,16 @@ function estimateSeasonStatline(sport, position, rating, games) {
 function getLeagueLeaders(career) {
     const league = career.proLeague;
     if (!league) return null;
-    const cacheKey = `${career.season}`;
+    /* Cache key includes the current week so leaders rescale as the season
+       progresses instead of always projecting a full 82/162/17-game pace. */
+    const gamesSoFar = Math.max(1, league.week);
+    const cacheKey = `${career.season}-${gamesSoFar}`;
     if (!league._leaderCache) league._leaderCache = {};
     if (!league._leaderCache[cacheKey]) {
-        const games = league.schedule.length;
         const pool = [];
         league.teams.forEach(t => {
             (t.roster || []).forEach(pl => {
-                pool.push({ name: pl.name, teamName: t.name, isUser: false, ...estimateSeasonStatline(career.sport, pl.position, pl.rating, games) });
+                pool.push({ name: pl.name, teamName: t.name, isUser: false, ...estimateSeasonStatline(career.sport, pl.position, pl.rating, gamesSoFar) });
             });
         });
         league._leaderCache[cacheKey] = pool;
