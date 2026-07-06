@@ -69,9 +69,7 @@ body {
 /* subtle ambient backdrop on wide viewports so the phone-shell reads intentionally,
    not as an unfinished responsive layout */
 body {
-    background:
-            radial-gradient(ellipse 900px 600px at 50% -10%, rgba(232,179,61,.05), transparent 60%),
-            var(--bg-base);
+    background: var(--bg-base);
 }
 h1, h2, h3, h4 { margin: 0; font-family: var(--font-display); font-weight: 600; letter-spacing: .01em; }
 p { margin: 0; }
@@ -130,7 +128,7 @@ body.noScroll { overflow: hidden; }
 .topBar__row { display: flex; align-items: center; gap: 10px; padding: 12px 14px; min-height: 30px; }
 .topBar__title { font-size: 19px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .topBar__spacer { width: 30px; }
-.topBar__brandDot { width: 26px; height: 26px; border-radius: 8px; background: linear-gradient(145deg, var(--gold), var(--gold-deep)); flex-shrink: 0; }
+.topBar__brandDot { width: 26px; height: 26px; border-radius: 8px; background: var(--gold); flex-shrink: 0; }
 .topBar__sub { padding: 0 14px 12px; margin-top: -4px; font-size: 13px; color: var(--text-muted); font-family: var(--font-body); }
 
 .iconBtn {
@@ -155,7 +153,7 @@ body.noScroll { overflow: hidden; }
     white-space: nowrap;
 }
 .btn:active { transform: scale(.97); }
-.btn--primary { background: linear-gradient(155deg, var(--gold), var(--gold-deep)); color: #1A1304; box-shadow: 0 6px 18px -6px rgba(232,179,61,.55); }
+.btn--primary { background: var(--gold); color: #1A1304; }
 .btn--primary:hover { filter: brightness(1.06); }
 .btn--secondary { background: var(--accent); color: #08110A; box-shadow: 0 6px 18px -8px var(--accent); }
 .btn--ghost { background: var(--bg-surface-raised); color: var(--text-primary); border: 1px solid var(--border-soft); }
@@ -184,7 +182,7 @@ body.noScroll { overflow: hidden; }
 .sportTile {
     display: flex; align-items: center; gap: 14px;
     padding: 16px 16px;
-    background: linear-gradient(155deg, var(--bg-surface-raised), var(--bg-surface));
+    background: var(--bg-surface-raised);
     border: 1px solid var(--border-subtle);
     border-left: 3px solid var(--tile-accent, var(--gold));
     border-radius: var(--radius-md);
@@ -372,7 +370,7 @@ input[type="range"]::-moz-range-thumb {
    --------------------------------------------------------------------- */
 .bioCard {
     display: flex; align-items: center; gap: 14px; padding: 14px; margin-bottom: 14px;
-    background: linear-gradient(155deg, var(--bg-surface-raised), var(--bg-surface));
+    background: var(--bg-surface-raised);
     border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
 }
 .bioCard .miniAvatar { width: 64px; height: 64px; border-radius: 14px; }
@@ -403,7 +401,7 @@ input[type="range"]::-moz-range-thumb {
 .timeline__step--current .timeline__label { color: var(--gold); font-weight: 600; }
 
 .actionCard {
-    background: linear-gradient(155deg, var(--accent-soft), transparent 70%), var(--bg-surface);
+    background: var(--bg-surface);
     border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 18px; margin-bottom: 22px;
 }
 .actionCard--compact { padding: 14px; margin-bottom: 0; background: var(--bg-surface-raised); }
@@ -444,7 +442,7 @@ input[type="range"]::-moz-range-thumb {
    --------------------------------------------------------------------- */
 .ovrBanner {
     display: flex; align-items: center; gap: 16px; padding: 18px;
-    background: linear-gradient(155deg, var(--gold-soft), transparent 70%), var(--bg-surface);
+    background: var(--bg-surface);
     border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); margin-bottom: 14px;
 }
 .ovrBanner__big { font-family: var(--font-mono); font-size: 44px; font-weight: 700; color: var(--gold); line-height: 1; }
@@ -463,7 +461,7 @@ input[type="range"]::-moz-range-thumb {
 .attrRow__name { font-size: 13.5px; font-weight: 600; }
 .attrRow__val { font-family: var(--font-mono); font-weight: 700; color: var(--text-secondary); }
 .attrRow__bar { grid-column: 1; height: 6px; border-radius: 4px; background: var(--bg-surface-raised); overflow: hidden; }
-.attrRow__fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--gold)); border-radius: 4px; transition: width .25s ease; }
+.attrRow__fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width .25s ease; }
 .attrRow__upBtn {
     grid-column: 2; grid-row: 1 / span 2; display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 1px; width: 58px; height: 44px; background: var(--accent); color: #08110A; border-radius: 10px; font-weight: 700; font-size: 13px;
@@ -489,8 +487,8 @@ input[type="range"]::-moz-range-thumb {
    --------------------------------------------------------------------- */
 .teamRecordCard {
     padding: 20px; border-radius: var(--radius-lg); margin-bottom: 18px;
-    background: linear-gradient(155deg, color-mix(in srgb, var(--team-accent, var(--accent)) 18%, var(--bg-surface)), var(--bg-surface));
-    border: 1px solid var(--border-subtle); border-left: 4px solid var(--team-accent, var(--accent));
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
 }
 .teamRecordCard__name { font-family: var(--font-display); font-size: 19px; font-weight: 600; }
 .teamRecordCard__sub { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
@@ -598,77 +596,77 @@ input[type="range"]::-moz-range-thumb {
 /* ---------------------------------------------------------------------
    15. MODAL
    --------------------------------------------------------------------- */
-.modalRoot { 
-    position: fixed; 
-    inset: 0; 
-    z-index: 100; 
-    pointer-events: none; 
+.modalRoot {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    pointer-events: none;
 }
-.modalRoot--open { 
-    pointer-events: auto; 
+.modalRoot--open {
+    pointer-events: auto;
 }
 .modalOverlay {
-    position: fixed; 
-    inset: 0; 
-    background: rgba(8,10,13,.72); 
+    position: fixed;
+    inset: 0;
+    background: rgba(8,10,13,.72);
     backdrop-filter: blur(3px);
-    display: flex; 
-    align-items: flex-end; 
-    justify-content: center; 
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
     padding: 0;
     animation: fadeIn .18s ease;
 }
-@media (min-width: 560px) { .modalOverlay { 
-    align-items: center; 
-    padding: 20px; } 
+@media (min-width: 560px) { .modalOverlay {
+    align-items: center;
+    padding: 20px; }
 }
 .modalCard {
-    width: 100%; 
-    max-width: 480px; 
-    max-height: 86vh; 
+    width: 100%;
+    max-width: 480px;
+    max-height: 86vh;
     overflow-y: auto;
-    background: var(--bg-surface); 
+    background: var(--bg-surface);
     border: 1px solid var(--border-subtle);
-    border-radius: 20px 20px 0 0; 
+    border-radius: 20px 20px 0 0;
     padding: 20px 20px calc(20px + var(--safe-bottom));
     animation: slideUp .22s cubic-bezier(.2,.8,.2,1);
 }
-@media (min-width: 560px) { .modalCard { 
-    border-radius: var(--radius-lg); 
-    animation: scaleIn .18s ease; } 
+@media (min-width: 560px) { .modalCard {
+    border-radius: var(--radius-lg);
+    animation: scaleIn .18s ease; }
 }
 .modalCard--wide { max-width: 560px; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideUp { from { transform: translateY(24px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 @keyframes scaleIn { from { transform: scale(.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-.modal__head { 
-    display: flex; 
-    align-items: center; 
-    justify-content: space-between; 
-    gap: 10px; 
-    margin-bottom: 14px; 
+.modal__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 14px;
 }
-.modal__head h2 { 
-    font-size: 18px; 
+.modal__head h2 {
+    font-size: 18px;
 }
-.modal__body { 
-    font-size: 14px; 
-    color: var(--text-secondary); 
-    line-height: 1.6; 
+.modal__body {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.6;
 }
-.modal__hint { 
-    font-size: 12.5px; 
-    color: var(--text-faint); 
-    margin-bottom: 14px; 
+.modal__hint {
+    font-size: 12.5px;
+    color: var(--text-faint);
+    margin-bottom: 14px;
 }
-.modal__foot { 
-    display: flex; 
-    gap: 10px; 
-    margin-top: 18px; 
+.modal__foot {
+    display: flex;
+    gap: 10px;
+    margin-top: 18px;
 }
-.modal__foot .btn { 
-    flex: 1; 
+.modal__foot .btn {
+    flex: 1;
 }
 
 .offerGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
