@@ -1029,7 +1029,36 @@ function r(min, max) { return Math.round(randFloat(min, max)); }
 
 
 
-
+function footballSeasonBand(group, overall) {
+    if (group === 'passer') {
+        if (overall >= 99) return { yds: [4700, 5500], td: [38, 50] };
+        if (overall >= 95) return { yds: [4300, 4900], td: [34, 42] };
+        if (overall >= 90) return { yds: [3900, 4600], td: [28, 38] };
+        if (overall >= 85) return { yds: [3500, 4100], td: [24, 32] };
+        if (overall >= 80) return { yds: [3100, 3700], td: [20, 28] };
+        if (overall >= 75) return { yds: [2700, 3400], td: [16, 24] };
+        if (overall >= 70) return { yds: [2000, 3000], td: [12, 20] };
+        return { yds: [1200, 2400], td: [6, 14] };
+    }
+    if (group === 'receiver') {
+        if (overall >= 99) return { yds: [1500, 1900], td: [12, 18] };
+        if (overall >= 95) return { yds: [1300, 1600], td: [10, 15] };
+        if (overall >= 90) return { yds: [1100, 1400], td: [8, 13] };
+        if (overall >= 85) return { yds: [900, 1200], td: [6, 11] };
+        if (overall >= 80) return { yds: [700, 1000], td: [4, 9] };
+        if (overall >= 75) return { yds: [500, 800], td: [3, 7] };
+        return { yds: [250, 600], td: [1, 5] };
+    }
+    return null;
+}
+function getFootballSeasonTarget(career, group) {
+    if (!career._fbTargetSeason || career._fbTargetSeason.season !== career.season || career._fbTargetSeason.group !== group) {
+        const band = footballSeasonBand(group, career.overall);
+        career._fbTargetSeason = { season: career.season, group,
+            yds: randInt(band.yds[0], band.yds[1]), td: randInt(band.td[0], band.td[1]) };
+    }
+    return career._fbTargetSeason;
+}
 function footballPrimeMult(age) {
     if (!age) return 1.0;
     if (age <= 21) return 0.68;
@@ -1044,11 +1073,21 @@ function generateFootballLine(posKey, perf, career) {
         case 'passer': {
             const completions = clamp(r(10, 18) + Math.round(p * 12), 4, 40);
             const attempts = completions + r(4, 10);
-            const passYds = clamp(Math.round(completions * (6 + p * 6)) + r(-15, 25), 0, 480);
-            const passTD = p > 0.82 ? r(2, 3) + (Math.random() < 0.25 ? 1 : 0)
+            let passYds = clamp(Math.round(completions * (6 + p * 6)) + r(-15, 25), 0, 480);
+            let passTD = p > 0.82 ? r(2, 3) + (Math.random() < 0.25 ? 1 : 0)
                 : p > 0.72 ? r(1, 2) + (Math.random() < 0.20 ? 1 : 0)
                     : p > 0.60 ? r(1, 2)
                         : r(0, 1);
+            if (career && career.seasonStats && career.seasonStats.gp >= 3) {
+                const target = getFootballSeasonTarget(career, 'passer');
+                const totalGames = LEAGUE_SHAPE.football.games;
+                const expYds = target.yds / totalGames, paceYds = (career.seasonStats.passYds || 0) / career.seasonStats.gp;
+                const ydsFactor = clamp(1 + (expYds - paceYds) / Math.max(expYds, 150) * 0.6, 0.55, 1.6);
+                passYds = clamp(Math.round(passYds * ydsFactor), 0, 480);
+                const expTd = target.td / totalGames, paceTd = (career.seasonStats.passTD || 0) / career.seasonStats.gp;
+                const tdFactor = clamp(1 + (expTd - paceTd) * 3, 0.4, 1.8);
+                passTD = clamp(Math.round(passTD * tdFactor), 0, 5);
+            }
             const ageIntBonus = (career && career.age && career.age > 36)
                 ? (career.age - 36) * 0.08
                 : 0;
@@ -1075,8 +1114,18 @@ function generateFootballLine(posKey, perf, career) {
             const targets = clamp(r(3, 8) + Math.round(p * 6), 1, 18);
             const catchRate = clamp(0.45 + p * 0.4, 0.3, 0.92);
             const rec = clamp(Math.round(targets * catchRate), 0, targets);
-            const recYds = clamp(rec * r(7, 16) + r(-10, 20), 0, 230);
-            const recTD = p > 0.85 ? r(1, 2) : (p > 0.6 && Math.random() < 0.35) ? 1 : 0;
+            let recYds = clamp(rec * r(7, 16) + r(-10, 20), 0, 230);
+            let recTD = p > 0.85 ? r(1, 2) : (p > 0.6 && Math.random() < 0.35) ? 1 : 0;
+            if (career && career.seasonStats && career.seasonStats.gp >= 3) {
+                const target = getFootballSeasonTarget(career, 'receiver');
+                const totalGames = LEAGUE_SHAPE.football.games;
+                const expYds = target.yds / totalGames, paceYds = (career.seasonStats.recYds || 0) / career.seasonStats.gp;
+                const ydsFactor = clamp(1 + (expYds - paceYds) / Math.max(expYds, 80) * 0.6, 0.5, 1.7);
+                recYds = clamp(Math.round(recYds * ydsFactor), 0, 230);
+                const expTd = target.td / totalGames, paceTd = (career.seasonStats.recTD || 0) / career.seasonStats.gp;
+                const tdFactor = clamp(1 + (expTd - paceTd) * 4, 0.3, 2.0);
+                recTD = clamp(Math.round(recTD * tdFactor), 0, 3);
+            }
             return { gp: 1, targets, rec, recYds, recTD };
         }
         case 'oline': {
@@ -1111,6 +1160,21 @@ function generateFootballLine(posKey, perf, career) {
             return { gp: 1, fgm, fga, xpm, points: fgm * 3 + xpm };
         }
     }
+}
+/* Rough anchors from real-world overall-to-PPG expectations, used as a
+   season ceiling so games self-correct back toward a plausible pace. */
+function nbaPpgCeilingForOverall(overall, isBig) {
+    let base;
+    if (overall >= 99) base = 34;
+    else if (overall >= 95) base = 30;
+    else if (overall >= 90) base = 27;
+    else if (overall >= 85) base = 22;
+    else if (overall >= 80) base = 18;
+    else if (overall >= 75) base = 15;
+    else if (overall >= 70) base = 11;
+    else if (overall >= 65) base = 8;
+    else base = 5;
+    return isBig ? Math.round(base * 0.9) : base;
 }
 function generateBasketballLine(posKey, perf, career) {
     const group = posInfo('basketball', posKey).group;
@@ -1147,7 +1211,7 @@ function generateBasketballLine(posKey, perf, career) {
        Rare monster outlier games can still spike above this on a given night. */
     const gpSoFar = (career && career.seasonStats && career.seasonStats.gp) || 0;
     const ppgSoFar = gpSoFar > 0 ? ((career.seasonStats.pts || 0) / gpSoFar) : 0;
-    const ppgCeiling = isBig ? 30 : 35;
+    const ppgCeiling = nbaPpgCeilingForOverall(career ? career.overall : 70, isBig);
     if (gpSoFar >= 5 && ppgSoFar > ppgCeiling) {
         effective *= clamp(1 - (ppgSoFar - ppgCeiling) * 0.04, 0.55, 1);
     }
@@ -2152,8 +2216,9 @@ function simulateProGame(career) {
 
     if (career.missedWeeks && career.missedWeeks.includes(league.week)) {
         simulateLeagueWeek(league, career.sport, null, career);
+        const weeksLeftOut = career.missedWeeks.filter(w => w >= league.week).length;
         const entry = { type: 'pro', label: 'Did not play', dnp: true, won: null, tied: null, score: null,
-            summary: career.seasonOut ? 'Out for the season with injury.' : 'Rested / sidelined this game.', perf: null, t: Date.now() };
+            summary: career.seasonOut ? 'Out for the season with injury.' : `Injured — out ${weeksLeftOut} more game${weeksLeftOut === 1 ? '' : 's'}.`, perf: null, t: Date.now() };
         logGame(career, entry);
         let seasonOver = false;
         if (league.complete) {
@@ -2634,6 +2699,52 @@ function getAwardBoard(career, key) {
     if (!career.awardCache.boards[key]) career.awardCache.boards[key] = buildAwardLeaderboard(career, key);
     return career.awardCache.boards[key];
 }
+/* Scores rookies by actual production instead of a random rating-based
+   grade, so a real 20ppg/13rpg season reliably outranks fictional rookies
+   who otherwise had no game-by-game stats to compare against. */
+function rookieScoreActual(sport, position, totals, gp) {
+    gp = gp || 1;
+    if (sport === 'basketball') {
+        const ppg = (totals.pts || 0) / gp, rpg = (totals.reb || 0) / gp, apg = (totals.ast || 0) / gp;
+        const spg = (totals.stl || 0) / gp, bpg = (totals.blk || 0) / gp;
+        return ppg * 1.0 + rpg * 0.8 + apg * 0.8 + spg * 1.5 + bpg * 1.5;
+    }
+    if (sport === 'football') {
+        const group = posInfo('football', position).group;
+        if (group === 'passer') return (totals.passYds || 0) * 0.02 + (totals.passTD || 0) * 4 - (totals.ints || 0) * 2;
+        if (group === 'rusher') return (totals.rushYds || 0) * 0.05 + (totals.rushTD || 0) * 6;
+        if (group === 'receiver') return (totals.recYds || 0) * 0.05 + (totals.recTD || 0) * 6;
+        if (['dline', 'front7', 'secondary'].includes(group)) return (totals.tackles || 0) * 0.5 + (totals.sacks || 0) * 3 + (totals.ints || 0) * 4;
+        return 0;
+    }
+    if (sport === 'baseball') {
+        if (['SP', 'RP'].includes(position)) {
+            const ip = totals.ip || 0, era = ip ? (totals.er * 9 / ip) : 5;
+            return clamp((5 - era) * 10, 0, 50);
+        }
+        const ab = totals.ab || 0, avg = ab ? totals.h / ab : 0;
+        return avg * 100 + (totals.hr || 0) * 2 + (totals.rbi || 0) * 0.5;
+    }
+    return 0;
+}
+function rookieScoreEstimate(sport, position, est) {
+    if (sport === 'basketball') {
+        return (est.ppg || 0) * 1.0 + (est.rpg || 0) * 0.8 + (est.apg || 0) * 0.8 + (est.spg || 0) * 1.5 + (est.bpg || 0) * 1.5;
+    }
+    if (sport === 'football') {
+        const group = posInfo('football', position).group;
+        if (group === 'passer') return (est.passYds || 0) * 0.02 + (est.passTD || 0) * 4 - (est.passInts || 0) * 2;
+        if (group === 'rusher') return (est.rushYds || 0) * 0.05 + (est.rushTD || 0) * 6;
+        if (group === 'receiver') return (est.recYds || 0) * 0.05 + (est.recTD || 0) * 6;
+        if (['DL', 'LB', 'S', 'CB'].includes(position)) return (est.tackles || 0) * 0.5 + (est.sacks || 0) * 3 + (est.defInts || 0) * 4;
+        return 0;
+    }
+    if (sport === 'baseball') {
+        if (['SP', 'RP'].includes(position)) return clamp((5 - (est.era || 5)) * 10, 0, 50);
+        return (est.avg || 0) * 100 + (est.hr || 0) * 2 + (est.rbi || 0) * 0.5;
+    }
+    return 0;
+}
 function poolFilterForAward(sport, key) {
     if (sport === 'baseball') {
         if (key === 'cyyoung') return p => statGroupFor('baseball', p.position) === 'pitcher';
@@ -2658,7 +2769,9 @@ function buildAwardLeaderboard(career, key) {
 
 
     let userVal;
-    if (key === 'mip') {
+    if (key === 'roty') {
+        userVal = rookieScoreActual(sport, career.position, career.seasonStats, career.seasonStats.gp || 1);
+    } else if (key === 'mip') {
         const prior = career.priorSeasonGrade != null ? career.priorSeasonGrade : computeSeasonGrade(career);
         userVal = 50 + (computeSeasonGrade(career) - prior);
     } else if (key === 'opoy' && career.position === 'QB') {
@@ -2690,12 +2803,23 @@ function buildAwardLeaderboard(career, key) {
         entries = [];
         const isRookieAward = key === 'roty';
         const posFilter = poolFilterForAward(sport, key);
+        const totalGames = league.schedule.length;
         pool.forEach(t => {
             (t.roster || []).forEach(p => {
                 if (isRookieAward && (p.age === undefined || p.age > 23)) return;
                 if (posFilter && !posFilter(p)) return;
-                const grade = key === 'mip' ? 50 + clamp(randInt(-8, 18), -30, 40)
-                    : clamp(p.rating + randInt(-20 + bias, 18 + bias), 35, 99);
+                let grade;
+                if (isRookieAward) {
+                    const est = estimateSeasonStatline(sport, p.position, p.rating, totalGames);
+                    // Real rookies rarely play at full "final form" rating in year 1 —
+                    // discount fictional rookies so a legit human rookie season stands out
+                    const rookieDiscount = 0.68;
+                    Object.keys(est).forEach(k => { if (typeof est[k] === 'number') est[k] *= rookieDiscount; });
+                    grade = rookieScoreEstimate(sport, p.position, est) * randFloat(0.85, 1.05);
+                } else {
+                    grade = key === 'mip' ? 50 + clamp(randInt(-8, 18), -30, 40)
+                        : clamp(p.rating + randInt(-20 + bias, 18 + bias), 35, 99);
+                }
                 entries.push({ name: p.name, teamName: t.name, isUser: false, grade });
             });
         });
