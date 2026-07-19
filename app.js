@@ -997,12 +997,12 @@ function newStatTotals(sport, posKey) {
 function addStatTotals(totals, line) {
     Object.keys(line).forEach(k => { totals[k] = (totals[k] || 0) + line[k]; });
 }
-function updateCareerHighs(career, line) {
+function updateCareerHighs(career, line, isPlayoffs) {
     const sport = career.sport;
-    if (!career.careerHighs) career.careerHighs = {};
-    const ch = career.careerHighs;
+    const chKey = isPlayoffs ? 'careerHighsPlayoffs' : 'careerHighs';
+    if (!career[chKey]) career[chKey] = {};
+    const ch = career[chKey];
     const fields = statFieldsFor(sport, career.position || 'GEN');
-    // Golf: lower is better for stroke categories
     const lowerIsBetter = new Set(['strokesTotal', 'relToPar']);
     fields.forEach(([k]) => {
         const val = line[k];
@@ -1949,7 +1949,16 @@ function simulateCollegeGame(career) {
 
 
 
-
+function archivePlayoffSeason(career, label) {
+    if (!career.seasonPlayoffStats) return;
+    const gp = career.seasonPlayoffStats.gp || 0;
+    if (gp <= 0) return;
+    career.careerStatsLog.push({
+        season: career.season, stage: 'playoffs', label,
+        totals: career.seasonPlayoffStats,
+        position: career.position,
+    });
+}
 function archiveSeason(career, stageKey, label) {
     career.careerStatsLog.push({
         season: career.season, stage: stageKey, label,
@@ -2006,6 +2015,7 @@ function runDraft(career) {
     career.team = team.id;
     insertUserIntoRoster(team, career);
     career.seasonStats = newStatTotals(career.sport, career.position || 'GEN');
+    career.seasonPlayoffStats = newStatTotals(career.sport, career.position || 'GEN');
     career.stage = 'pro';
     career.season = 1;
     career.seasonGameCount = 0;
@@ -2140,6 +2150,7 @@ function simulateMinorsGame(career) {
 function callUpToMajors(career) {
     archiveSeason(career, 'minors', career.minors.affiliateName);
     career.seasonStats = newStatTotals('baseball', career.position);
+    career.seasonPlayoffStats = newStatTotals('baseball', career.position);
     career.stage = 'pro';
     career.age = AGE_MILESTONES.baseball.proStart;
     career.retirementAge = rollRetirementAge('baseball');
@@ -2447,8 +2458,9 @@ function simulateSeriesGameForUser(series, career, tierBoost) {
     const userWon = isTeamA ? aWins : !aWins;
     const opp = isTeamA ? series.teamB : series.teamA;
     const line = genStatline(career, perf);
-    addStatTotals(career.seasonStats, line);
-    updateCareerHighs(career, line);
+    if (!career.seasonPlayoffStats) career.seasonPlayoffStats = newStatTotals(career.sport, career.position || 'GEN');
+    addStatTotals(career.seasonPlayoffStats, line);
+    updateCareerHighs(career, line, true);
     const summary = statlineSummary(career.sport, career.position, line);
     const pts = awardPoints(career, 'pro', perf, career.sport);
     return { userWon, opp, summary, perf, pts };
@@ -3024,6 +3036,7 @@ function retireCareer(career) {
     } else {
         const team = teamById(career.proLeague, career.team);
         archiveSeason(career, 'pro', `${team.name} (Season ${career.season})`);
+        archivePlayoffSeason(career, `${team.name} Playoffs (Season ${career.season})`);
     }
     career.stage = 'retired';
     logHistory(career, `${career.name} retires at age ${career.age} after ${career.season} professional season${career.season === 1 ? '' : 's'}.`);
@@ -3041,6 +3054,7 @@ function startNewProSeason(career) {
     const league = career.proLeague;
     const team = teamById(league, career.team);
     archiveSeason(career, 'pro', `${team.name} (Season ${career.season})`);
+    archivePlayoffSeason(career, `${team.name} Playoffs (Season ${career.season})`);
     league.teams.forEach(t => {
         t.wins = 0; t.losses = 0; t.ties = 0; t.pf = 0; t.pa = 0; t.streak = 0;
         // Stronger pull-to-average so dynasties can't compound for a decade straight
@@ -3060,6 +3074,7 @@ function startNewProSeason(career) {
     /* Reset trade cooldown so prior season's game count doesn't block new season requests */
     if (career.trade) career.trade.lastRequestGameCount = -999;
     career.seasonStats = newStatTotals(career.sport, career.position || 'GEN');
+    career.seasonPlayoffStats = newStatTotals(career.sport, career.position || 'GEN');
     planSeasonAvailability(career);
     logHistory(career, `Season ${career.season} begins with the ${team.name} (age ${career.age}).`);
     saveState();
@@ -4762,7 +4777,7 @@ function renderTrophyCase(career) {
     const counts = career.careerAwardCounts || {};
     const countKeys = Object.keys(counts);
     const summaryChips = countKeys.length
-        ? `<div class="trophyChips">${countKeys.map(label => `<span class="trophyChip">${label} <strong>×${counts[label]}</strong></span>`).join('')}</div>`
+        ? `<div class="trophyChips">${countKeys.map(label => `<span class="trophyChip"><strong>${counts[label]}×</strong> ${escapeHtml(label)}</span>`).join('')}</div>`
         : `<p class="emptyHint">No hardware yet — keep simulating seasons.</p>`;
 
 
@@ -5050,51 +5065,28 @@ const STAT_AGGREGATE_MAX = { highGame: true };
 
 
 
-function careerHighsHTML(career) {
-    if (!career.careerHighs || !Object.keys(career.careerHighs).length) return '';
-    const sport = career.sport;
-    const pos = career.position || 'GEN';
-    const fields = statFieldsFor(sport, pos);
-    const ch = career.careerHighs;
+function careerHighsHTML(fields, highsObj, sectionTitle) {
+    if (!highsObj || !Object.keys(highsObj).length) return '';
     const lowerIsBetter = new Set(['strokesTotal', 'relToPar']);
     const rows = fields
-        .filter(([k]) => ch[k] !== undefined && k !== 'gp')
+        .filter(([k]) => highsObj[k] !== undefined && k !== 'gp')
         .map(([k, label]) => {
             const note = lowerIsBetter.has(k) ? ' (lowest)' : '';
             return `<div class="gameLogRow">
         <div class="gameLogRow__main">
           <span class="gameLogRow__label">${label}${note}</span>
-          <span class="gameLogRow__summary">${formatStatVal(k, ch[k])}</span>
+          <span class="gameLogRow__summary">${formatStatVal(k, highsObj[k])}</span>
         </div>
       </div>`;
         }).join('');
+    if (!rows) return '';
     return `<section class="block">
-    <h2 class="block__title">Career Highs</h2>
+    <h2 class="block__title">${escapeHtml(sectionTitle)} Career Highs</h2>
     <div class="gameLogList">${rows}</div>
   </section>`;
 }
 
-
-
-
-function renderStatsTab(career) {
-    const sport = career.sport, pos = career.position || 'GEN';
-    const fields = statFieldsFor(sport, pos);
-    const historicalRows = career.careerStatsLog.map(s => ({
-        label: `${s.label}${s.stage ? ` (${capitalize(s.stage)})` : ''}`, totals: s.totals,
-    }));
-    const currentLabel = career.stage === 'highschool' ? career.highSchool.name
-        : career.stage === 'college' ? career.college.name
-            : `Current — ${teamNameForCareer(career)}`;
-    const rows = [...historicalRows, { label: currentLabel, totals: career.seasonStats, current: true }];
-
-
-
-
-
-
-
-
+function statsSectionHTML(sport, pos, fields, rows, sectionTitle, highsObj) {
     const careerTotals = {};
     fields.forEach(([k]) => careerTotals[k] = 0);
     rows.forEach(rw => fields.forEach(([k]) => {
@@ -5102,21 +5094,7 @@ function renderStatsTab(career) {
         else careerTotals[k] += (rw.totals[k] || 0);
     }));
 
-
-
-
-
-
-
-
     const derivedHeaders = derivedColumns(sport, pos, careerTotals).map(([l]) => l);
-
-
-
-
-
-
-
 
     function tableRowHTML(rw) {
         const derived = derivedColumns(sport, pos, rw.totals);
@@ -5127,32 +5105,47 @@ function renderStatsTab(career) {
     </tr>`;
     }
 
-
-
-
-
-
-
-
-    const table = `<div class="tableScroll"><table class="statsTable">
+    const table = rows.length ? `<div class="tableScroll"><table class="statsTable">
     <thead><tr><th>Season</th>${derivedHeaders.map(l => `<th class="statsTable__headline">${l}</th>`).join('')}${fields.map(([, l]) => `<th>${l}</th>`).join('')}</tr></thead>
     <tbody>
       ${rows.map(tableRowHTML).join('')}
-      <tr class="statsTable__totals"><td>Career Totals</td>${derivedColumns(sport, pos, careerTotals).map(([, v]) => `<td>${v}</td>`).join('')}${fields.map(([k]) => `<td>${formatStatVal(k, careerTotals[k])}</td>`).join('')}</tr>
+      <tr class="statsTable__totals"><td>${escapeHtml(sectionTitle)} Totals</td>${derivedColumns(sport, pos, careerTotals).map(([, v]) => `<td>${v}</td>`).join('')}${fields.map(([k]) => `<td>${formatStatVal(k, careerTotals[k])}</td>`).join('')}</tr>
     </tbody>
-  </table></div>`;
-
-
-
+  </table></div>` : `<p class="emptyHint">No ${sectionTitle.toLowerCase()} games played yet.</p>`;
 
     return `
     <section class="block">
-      <h2 class="block__title">Stat Log</h2>
-      <p class="formSection__hint">${sport === 'bowling' ? 'Tracked PBC-style: tournament average, titles, and tour points.' : sport === 'golf' ? 'Tracked PGC-style: scoring average, cuts made, and tour points.' : 'Season-by-season totals across your whole career.'}</p>
+      <h2 class="block__title">${escapeHtml(sectionTitle)} Stat Log</h2>
       ${table}
     </section>
-    ${careerHighsHTML(career)}
+    ${careerHighsHTML(fields, highsObj, sectionTitle)}
   `;
+}
+
+function renderStatsTab(career) {
+    const sport = career.sport, pos = career.position || 'GEN';
+    const fields = statFieldsFor(sport, pos);
+
+    const regularHistorical = career.careerStatsLog.filter(s => s.stage !== 'playoffs').map(s => ({
+        label: `${s.label}${s.stage ? ` (${capitalize(s.stage)})` : ''}`, totals: s.totals,
+    }));
+    const currentLabel = career.stage === 'highschool' ? career.highSchool.name
+        : career.stage === 'college' ? career.college.name
+            : `Current — ${teamNameForCareer(career)}`;
+    const regularRows = [...regularHistorical, { label: currentLabel, totals: career.seasonStats, current: true }];
+
+    let out = `<p class="formSection__hint">${sport === 'bowling' ? 'Tracked PBC-style: tournament average, titles, and tour points.' : sport === 'golf' ? 'Tracked PGC-style: scoring average, cuts made, and tour points.' : 'Season-by-season totals across your whole career.'}</p>`;
+    out += statsSectionHTML(sport, pos, fields, regularRows, 'Regular Season', career.careerHighs);
+
+    if (HAS_TRADES[sport]) {
+        const playoffHistorical = career.careerStatsLog.filter(s => s.stage === 'playoffs').map(s => ({ label: s.label, totals: s.totals }));
+        const hasCurrentPlayoffs = career.seasonPlayoffStats && (career.seasonPlayoffStats.gp || 0) > 0;
+        const playoffRows = hasCurrentPlayoffs
+            ? [...playoffHistorical, { label: `Current Playoffs — ${teamNameForCareer(career)}`, totals: career.seasonPlayoffStats, current: true }]
+            : playoffHistorical;
+        out += statsSectionHTML(sport, pos, fields, playoffRows, 'Playoffs', career.careerHighsPlayoffs);
+    }
+    return out;
 }
 
 
