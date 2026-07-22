@@ -1176,6 +1176,14 @@ function nbaPpgCeilingForOverall(overall, isBig) {
     else base = 5;
     return isBig ? Math.round(base * 0.9) : base;
 }
+const BBALL_TIER_CEILINGS = {
+    goat:        { pts: 70, vol: 1.55, reb: 1.6,  ast: 1.8,  stocks: 1.7 },
+    allstar:     { pts: 58, vol: 1.3,  reb: 1.3,  ast: 1.45, stocks: 1.35 },
+    star:        { pts: 50, vol: 1.1,  reb: 1.1,  ast: 1.2,  stocks: 1.1 },
+    starter:     { pts: 42, vol: 0.85, reb: 1.0,  ast: 1.0,  stocks: 1.0 },
+    roleplayer:  { pts: 36, vol: 0.7,  reb: 0.9,  ast: 0.85, stocks: 0.85 },
+    benchwarmer: { pts: 28, vol: 0.55, reb: 0.8,  ast: 0.7,  stocks: 0.7 },
+};
 function generateBasketballLine(posKey, perf, career) {
     const group = posInfo('basketball', posKey).group;
     const p = perf / 100;
@@ -1189,6 +1197,7 @@ function generateBasketballLine(posKey, perf, career) {
 
     const tierKey = (career && career.tier) ? career.tier : DEFAULT_TIER;
     const tier = CAREER_TIERS[tierKey] || CAREER_TIERS[DEFAULT_TIER];
+    const ceil = BBALL_TIER_CEILINGS[tierKey] || BBALL_TIER_CEILINGS[DEFAULT_TIER];
     const statMult = tier.statMult || 1.0;
 
 
@@ -1235,18 +1244,18 @@ function generateBasketballLine(posKey, perf, career) {
     const gameModifier = gameRoll < 0.02 ? 2.1 : (gameRoll < 0.12 ? 1.35 : (gameRoll < 0.22 ? 0.60 : 1.0));
 
 
-    /* FGA — guards shoot more volume; ball handling adds shot creation */
     /* FGA — guards shoot more volume; ball handling adds shot creation.
-       Position-based cap keeps bigs from posting guard-level scoring volume. */
+       Position-based cap keeps bigs from posting guard-level scoring volume.
+       Cap scales with career tier so a GOAT can post monster shot totals a
+       bench player never will. */
     const baseFGA = isBig ? r(8, 13) : (isGuard ? r(10, 17) : r(9, 15));
-    const fgaCap = isBig ? 22 : 28;
+    const fgaCap = Math.round((isBig ? 20 : 26) * ceil.vol);
     const fga = clamp(Math.round((baseFGA + effective * 7 + ballHandlingAttr * 2) * gameModifier), 1, fgaCap);
 
-
     const fgPctBase = isBig ? (0.46 + effective * 0.14) : (0.40 + effective * 0.12);
-    const fgPct = clamp(fgPctBase, 0.30, isBig ? 0.64 : 0.54);
+    const hotShootingBonus = gameModifier >= 1.35 ? 0.06 : 0;
+    const fgPct = clamp(fgPctBase + hotShootingBonus, 0.30, isBig ? 0.70 : 0.64);
     const fgm = clamp(Math.round(fga * fgPct), 0, fga);
-
 
     /* 3-point: driven by the Three Point attribute directly, not just perf.
        Target bands: 70-80 rating -> ~34-36%, 80-90 -> ~37-40%, 90-99 -> ~40-43% */
@@ -1261,49 +1270,55 @@ function generateBasketballLine(posKey, perf, career) {
         tpaBase = clamp(r(3, 6) + Math.round(threeAttr * 4), 0, 10);
         tp3Pct = clamp(0.31 + threeAttr * 0.11, 0.27, 0.42);
     }
-    const tpa = clamp(Math.round(tpaBase * gameModifier), 0, 13);
-    const tpm = clamp(Math.round(tpa * tp3Pct), 0, tpa);
+    const tpaCap = Math.round((isBig ? 8 : 13) * ceil.vol);
+    const tpa = clamp(Math.round(tpaBase * gameModifier), 0, tpaCap);
+    const tpm = clamp(Math.round(tpa * tp3Pct), 0, Math.min(tpa, 15));
 
-
-    const ftMade = clamp(Math.round((effective * 5 + r(0, 2)) * gameModifier), 0, 13);
-
+    const ftCap = Math.round(14 * ceil.vol);
+    const ftMade = clamp(Math.round((effective * 5 + r(0, 2)) * gameModifier), 0, ftCap);
 
     const rawPts = (fgm - tpm) * 2 + tpm * 3 + ftMade;
-    /* Nightly ceiling — bigs top out lower than guards/wings on any single game */
-    const nightlyCap = isBig ? 42 : 48;
+    /* Nightly ceiling — bigs top out a bit lower than guards/wings, and the
+       ceiling itself scales with career tier (GOAT vs bench warmer). */
+    const nightlyCap = Math.round((isBig ? ceil.pts * 0.85 : ceil.pts));
     const pts = clamp(rawPts, 0, nightlyCap);
 
 
-    /* Rebounds — now factors the Rebounding attribute and Athleticism directly */
+    /* Rebounds — now factors the Rebounding attribute and Athleticism directly.
+       rebMax scales with career tier so elite players can occasionally have
+       a genuine monster boards night. */
     let rebBase, rebMax;
     if (isC) { rebBase = r(4, 8) + effective * 7 + reboundingAttr * 5; rebMax = 23; }
     else if (isPF) { rebBase = r(3, 7) + effective * 6 + reboundingAttr * 4; rebMax = 18; }
     else if (isWing) { rebBase = r(1, 4) + effective * 3.5 + reboundingAttr * 3.5; rebMax = 11; }
     else if (posKey === 'SG') { rebBase = r(1, 3) + effective * 2 + reboundingAttr * 2.5; rebMax = 7; }
     else { /* PG */ rebBase = r(1, 3) + effective * 1.5 + reboundingAttr * 3 + athleticismAttr * 1.2; rebMax = 9; }
+    rebMax = Math.round(rebMax * ceil.reb);
     const reb = clamp(Math.round(rebBase * (gameModifier > 1 ? 1.15 : 1.0)), 0, rebMax);
 
-
     /* Assists — now scales hard off the Passing attribute, since that's the
-       whole point of investing skill points there as a PG */
+       whole point of investing skill points there as a PG. astMax scales
+       with career tier. */
     let astBase, astMax;
     if (isPG)        { astBase = r(1, 3) + effective * 2 + passingAttr * 6.5; astMax = 12; }
     else if (posKey === 'SG') { astBase = r(0, 2) + effective * 1.5 + passingAttr * 4; astMax = 8; }
     else if (isWing) { astBase = r(1, 3) + effective * 1.5 + passingAttr * 5; astMax = 10; }
     else             { astBase = r(0, 2) + effective * 1 + passingAttr * 2.5; astMax = 6; }
-    const ast = clamp(Math.round(astBase * (gameModifier > 1 ? 1.1 : 1.0)), 0, astMax);   // ← ADD THIS LINE
+    astMax = Math.round(astMax * ceil.ast);
+    const ast = clamp(Math.round(astBase * (gameModifier > 1 ? 1.1 : 1.0)), 0, astMax);
 
-
-    const stl = clamp(r(0, 2) + (Math.random() < effective * 0.55 ? 1 : 0), 0, 5);
-
+    const stlCap = Math.round(5 * ceil.stocks);
+    const stlRaw = r(0, 2) + (Math.random() < effective * 0.55 ? 1 : 0) + (gameModifier > 1.3 ? randInt(0, 2) : 0);
+    const stl = clamp(Math.round(stlRaw * ceil.stocks), 0, stlCap);
 
     let blkBase, blkMax;
     if (isC)      { blkBase = 0.3 + blockingAttr * 3.2; blkMax = 9; }
     else if (isPF){ blkBase = 0.15 + blockingAttr * 2.0; blkMax = 6; }
     else if (isWing){ blkBase = 0.05 + blockingAttr * 1.7; blkMax = 4; }
     else          { blkBase = 0.02 + blockingAttr * 1.0; blkMax = 3; } // guards
-    const blk = clamp(Math.round(blkBase + randFloat(-0.6, 0.7)), 0, blkMax);
-
+    blkMax = Math.round(blkMax * ceil.stocks);
+    const blkRaw = blkBase + randFloat(-0.6, 0.7) + (gameModifier > 1.3 ? randFloat(0, 1.5) : 0);
+    const blk = clamp(Math.round(blkRaw * ceil.stocks), 0, blkMax);
 
     return { gp: 1, pts, reb, ast, stl, blk, fgm, fga, tpm, tpa };
 }
@@ -2939,20 +2954,24 @@ function finalizeSeasonAwards(career, playoffResult) {
 
 
 
-    /* Playoff awards */
+    /* Playoff awards.
+       Conference Finals MVP and Finals MVP share a single "best player on
+       your team this postseason" roll, so a star who wins the whole thing
+       usually picks up both instead of just one or the other. */
     if (playoffResult && playoffResult.madePlayoffs) {
-        if (playoffResult.wonIt) {
-            if (sport === 'football') {
+        if (sport === 'football') {
+            if (playoffResult.wonIt) {
                 const bestOnTeam = wasBestOnOwnTeam(career);
                 if (bestOnTeam) items.push({ key: 'superBowlMvp', label: labels.superBowlMvp || 'Super Bowl MVP', won: true, rank: 1, total: 1 });
-            } else {
-                // Finals MVP: won the title — were you the best player?
-                const bestOnTeam = wasBestOnOwnTeam(career);
-                if (bestOnTeam) items.push({ key: 'finalsMvp', label: 'Finals MVP', won: true, rank: 1, total: 1 });
             }
-        } else if (playoffResult.wonConference && sport !== 'football') {
-            const bestOnTeam = wasBestOnOwnTeam(career);
-            if (bestOnTeam) items.push({ key: 'confFinalsMvp', label: 'Conference Finals MVP', won: true, rank: 1, total: 1 });
+        } else if (playoffResult.wonConference) {
+            const isBestPlayer = wasBestOnOwnTeam(career);
+            if (isBestPlayer && Math.random() < 0.9) {
+                items.push({ key: 'confFinalsMvp', label: 'Conference Finals MVP', won: true, rank: 1, total: 1 });
+            }
+            if (playoffResult.wonIt && isBestPlayer && Math.random() < 0.9) {
+                items.push({ key: 'finalsMvp', label: 'Finals MVP', won: true, rank: 1, total: 1 });
+            }
         }
     }
 
@@ -4144,6 +4163,8 @@ function gameLogRowHTML(career, g) {
     let resultTag = '';
     if (g.type === 'tour') {
         resultTag = `<span class="resultTag ${g.place === 1 ? 'resultTag--win' : 'resultTag--neutral'}">${g.place === 1 ? 'WON' : ordinal(g.place)}</span>`;
+    } else if (g.dnp) {
+        resultTag = `<span class="resultTag resultTag--neutral">DNP</span>`;
     } else {
         resultTag = `<span class="resultTag ${g.won ? 'resultTag--win' : (g.tied ? 'resultTag--tie' : 'resultTag--loss')}">${g.won ? 'W' : (g.tied ? 'T' : 'L')}${g.score ? ' ' + g.score : ''}</span>`;
     }
