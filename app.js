@@ -413,6 +413,21 @@ const TIER_OVERALL_CAPS = {
     roleplayer: 87,
     benchwarmer:62,
 };
+/* Football and basketball use a tighter rating scale for ordinary starters:
+   90+ should read as genuinely elite, not the ceiling for a reliable starter. */
+const TIER_OVERALL_CAPS_BY_SPORT = {
+    football: {
+        goat: 99, allstar: 96, star: 91, starter: 84, roleplayer: 77, benchwarmer: 62,
+    },
+    basketball: {
+        goat: 99, allstar: 96, star: 91, starter: 85, roleplayer: 78, benchwarmer: 62,
+    },
+};
+function tierOverallCap(sport, tier) {
+    const key = tier || DEFAULT_TIER;
+    return (TIER_OVERALL_CAPS_BY_SPORT[sport] && TIER_OVERALL_CAPS_BY_SPORT[sport][key])
+        ?? TIER_OVERALL_CAPS[key] ?? 99;
+}
 const DEFAULT_TIER = 'star';
 
 
@@ -497,6 +512,9 @@ function getCareer(sport, id) {
             }
         });
         career.overall = computeOverall(career.attributes, career.sport, career.position);
+    }
+    if (career.sport === 'football' || career.sport === 'basketball') {
+        career.overall = Math.min(Number(career.overall) || 0, tierOverallCap(career.sport, career.tier));
     }
     return career;
 }
@@ -593,7 +611,7 @@ function canUpgrade(career, attrName) {
     if (val >= ATTR_MAX) return false;
     if (career.skillPoints < upgradeCost(val)) return false;
     // Tier-based overall cap: can't push the overall above the tier ceiling
-    const cap = TIER_OVERALL_CAPS[career.tier || DEFAULT_TIER] ?? 99;
+    const cap = tierOverallCap(career.sport, career.tier);
     if (career.overall >= cap) return false;
     return true;
 }
@@ -602,7 +620,10 @@ function upgradeAttribute(career, attrName) {
     const cost = upgradeCost(career.attributes[attrName]);
     career.skillPoints -= cost;
     career.attributes[attrName] = clamp(career.attributes[attrName] + 1, ATTR_MIN, ATTR_MAX);
-    career.overall = computeOverall(career.attributes, career.sport, career.position);
+    career.overall = Math.min(
+        computeOverall(career.attributes, career.sport, career.position),
+        tierOverallCap(career.sport, career.tier),
+    );
     saveState();
     return true;
 }
@@ -716,11 +737,14 @@ function skillPointsEarned(stage, perf, sport, tier, devSpeed) {
         pts = pts * scale;
     }
     /* Basketball and baseball have far more high school/college games now,
-       so points per game are scaled down to land around 1 skill point
-       every 3 games instead of every single game. */
+       so points per game are scaled down to avoid rewarding every game as a
+       full skill point. */
     if ((stage === 'highschool' || stage === 'college') && (sport === 'basketball' || sport === 'baseball')) {
-        pts = pts / 3;
+        pts = pts / (sport === 'baseball' ? 2.75 : 3);
     }
+    /* Baseball has a 162-game path and a long development curve; give it a
+       small, consistent progression lift without turning upgrades into a flood. */
+    if (sport === 'baseball') pts *= 1.1;
     pts = pts * (TIER_PROGRESSION_MULT[tier] ?? 1) * (devSpeed ?? 1);
     return pts;
 }
@@ -961,13 +985,13 @@ const FOOTBALL_STAT_FIELDS = {
     secondary:[['gp','GP'],['tackles','TKL'],['ints','INT'],['passDef','PD']],
     kicker:   [['gp','GP'],['fgm','FGM'],['fga','FGA'],['xpm','XPM'],['points','PTS']],
 };
-const BASKETBALL_STAT_FIELDS = [['gp','GP'],['pts','PTS'],['reb','REB'],['ast','AST'],['stl','STL'],['blk','BLK'],['fgm','FGM'],['fga','FGA'],['tpm','3PM'],['tpa','3PA']];
+const BASKETBALL_STAT_FIELDS = [['gp','GP'],['pts','PTS'],['reb','REB'],['ast','AST'],['stl','STL'],['blk','BLK'],['fgm','FGM'],['fga','FGA'],['tpm','3PM'],['tpa','3PA'],['ftm','FTM'],['fta','FTA'],['tov','TOV'],['pf','PF']];
 const BASEBALL_STAT_FIELDS = {
-    hitter:  [['gp','G'],['ab','AB'],['h','H'],['hr','HR'],['rbi','RBI'],['r','R'],['sb','SB'],['bb','BB'],['so','SO']],
-    pitcher: [['gp','G'],['ip','IP'],['er','ER'],['h','H'],['bb','BB'],['k','K'],['w','W'],['l','L'],['sv','SV']],
+    hitter:  [['gp','G'],['ab','AB'],['h','H'],['doubles','2B'],['triples','3B'],['hr','HR'],['tb','TB'],['rbi','RBI'],['r','R'],['sb','SB'],['bb','BB'],['hbp','HBP'],['sf','SF'],['so','SO']],
+    pitcher: [['gp','G'],['ip','IP'],['er','ER'],['h','H'],['bb','BB'],['k','K'],['hrAllowed','HR'],['w','W'],['l','L'],['sv','SV']],
 };
 const BOWLING_STAT_FIELDS = [['eventsPlayed','EVT'],['games','GM'],['pinfall','PINS'],['highGame','HI GM'],['titles','TITLES'],['top5','TOP 5'],['cashes','CASHES'],['earnings','EARNINGS'],['points','TOUR PTS']];
-const GOLF_STAT_FIELDS = [['eventsPlayed','EVT'],['cutsMade','CUTS'],['wins','W'],['top10','T10'],['roundsPlayed','RNDS'],['strokesTotal','STRK'],['earnings','EARNINGS'],['points','TOUR PTS']];
+const GOLF_STAT_FIELDS = [['eventsPlayed','EVT'],['cutsMade','CUTS'],['wins','W'],['top10','T10'],['roundsPlayed','RNDS'],['strokesTotal','STRK'],['eagles','EAG'],['birdies','BIRD'],['pars','PAR'],['bogeys','BOGEY'],['doubleBogeys','DBL'],['fairwaysHit','FWH'],['fairwayChances','FW ATT'],['greensInRegulation','GIR'],['putts','PUTTS'],['earnings','EARNINGS'],['points','TOUR PTS']];
 
 
 
@@ -992,10 +1016,21 @@ function newStatTotals(sport, posKey) {
     const fields = statFieldsFor(sport, posKey);
     const t = {};
     fields.forEach(([k]) => t[k] = 0);
+    if (sport === 'basketball' || sport === 'baseball') t.detailGp = 0;
     return t;
 }
 function addStatTotals(totals, line) {
     Object.keys(line).forEach(k => { totals[k] = (totals[k] || 0) + line[k]; });
+    /* Older saves don't contain the newer detailed box-score fields. Track
+       how many games have complete detail so rate stats never pretend those
+       older games were recorded as zeros. */
+    if (line && line.gp && (
+        (line.fta !== undefined && line.tov !== undefined) ||
+        (line.tb !== undefined && line.hbp !== undefined) ||
+        line.hrAllowed !== undefined
+    )) {
+        totals.detailGp = (totals.detailGp || 0) + line.gp;
+    }
 }
 function updateCareerHighs(career, line, isPlayoffs) {
     const sport = career.sport;
@@ -1088,12 +1123,13 @@ function generateFootballLine(posKey, perf, career) {
                 const tdFactor = clamp(1 + (expTd - paceTd) * 3, 0.4, 1.8);
                 passTD = clamp(Math.round(passTD * tdFactor), 0, 5);
             }
-            const ageIntBonus = (career && career.age && career.age > 36)
-                ? (career.age - 36) * 0.08
-                : 0;
-            const intChance = p > 0.82 ? 0.50 : p > 0.65 ? 0.65 : p > 0.45 ? 0.82 : 0.95;
-            const adjustedIntChance = clamp(intChance + ageIntBonus, 0, 0.98);
-            const ints = (Math.random() < adjustedIntChance ? 1 : 0) + (p < 0.60 && Math.random() < 0.20 ? 1 : 0);
+            /* Interceptions are a per-pass outcome, not a 50–95% chance of
+               throwing one every game. Rolling once per attempt gives a
+               realistic spread while preserving the skill and age effects. */
+            const ageIntBonus = career && career.age > 36 ? (career.age - 36) * 0.0015 : 0;
+            const intRate = clamp(0.043 - p * 0.032 + ageIntBonus, 0.008, 0.05);
+            let ints = 0;
+            for (let i = 0; i < attempts; i++) if (Math.random() < intRate) ints++;
             const rushYds = clamp(r(-3, 10) + Math.round(p * 15), -5, 90);
             return { gp: 1, completions, attempts, passYds, passTD, ints, rushYds };
         }
@@ -1172,9 +1208,30 @@ function nbaPpgCeilingForOverall(overall, isBig) {
     else if (overall >= 80) base = 18;
     else if (overall >= 75) base = 15;
     else if (overall >= 70) base = 11;
-    else if (overall >= 65) base = 8;
-    else base = 5;
+    else if (overall >= 60) base = 9;
+    else base = 7;
     return isBig ? Math.round(base * 0.9) : base;
+}
+function nbaStatEquivalentOverall(overall) {
+    const o = clamp(Number(overall) || 65, 50, 99);
+    /* Lower Career Mode ratings play closer to the 2K rotation-player scale;
+       higher ratings still separate cleanly into star and superstar output. */
+    if (o <= 60) return 68 + (o - 50) * 0.4;
+    if (o <= 70) return 72 + (o - 60) * 0.6;
+    if (o <= 80) return 80 + (o - 70) * 0.45;
+    if (o <= 90) return 85 + (o - 80) * 0.5;
+    return 90 + (o - 90) * 0.9;
+}
+function samplePoissonCount(mean, maxCount) {
+    const lambda = clamp(Number(mean) || 0, 0, 12);
+    if (lambda <= 0) return 0;
+    const cutoff = Math.exp(-lambda);
+    let product = 1, count = 0;
+    do {
+        count++;
+        product *= Math.random();
+    } while (product > cutoff && count <= maxCount + 1);
+    return clamp(count - 1, 0, maxCount);
 }
 const BBALL_TIER_CEILINGS = {
     goat:        { pts: 70, vol: 1.55, reb: 1.6,  ast: 1.8,  stocks: 1.7 },
@@ -1214,13 +1271,16 @@ function generateBasketballLine(posKey, perf, career) {
     }
 
 
-    let effective = p * statMult * primeMult;
+    const overall = career ? career.overall : 70;
+    const translatedOverall = nbaStatEquivalentOverall(overall);
+    const overallAbility = clamp((translatedOverall - 55) / 45, 0.18, 1.05);
+    let effective = clamp((p * 0.52 + overallAbility * 0.48) * statMult * primeMult, 0, 1.1);
     /* Soft season-average damper: once games pile up, keep a guard/wing from
        running away past ~35 ppg, or a big past ~30 ppg, for the full season.
        Rare monster outlier games can still spike above this on a given night. */
     const gpSoFar = (career && career.seasonStats && career.seasonStats.gp) || 0;
     const ppgSoFar = gpSoFar > 0 ? ((career.seasonStats.pts || 0) / gpSoFar) : 0;
-    const ppgCeiling = nbaPpgCeilingForOverall(career ? career.overall : 70, isBig);
+    const ppgCeiling = nbaPpgCeilingForOverall(translatedOverall, isBig);
     if (gpSoFar >= 5 && ppgSoFar > ppgCeiling) {
         effective *= clamp(1 - (ppgSoFar - ppgCeiling) * 0.04, 0.55, 1);
     }
@@ -1236,6 +1296,10 @@ function generateBasketballLine(posKey, perf, career) {
     const athleticismAttr = clamp(((attrs['Athleticism'] ?? 65) - 25) / 74, 0, 1);
     const ballHandlingAttr = clamp(((attrs['Ball Handling'] ?? 65) - 25) / 74, 0, 1);
     const blockingAttr = clamp(((attrs['Shot Blocking'] ?? 40) - 25) / 74, 0, 1);
+    const perimeterDefenseAttr = clamp(((attrs['Perimeter Defense'] ?? 55) - 25) / 74, 0, 1);
+    const tierVolume = {
+        goat: 1.12, allstar: 1.06, star: 0.98, starter: 0.88, roleplayer: 0.78, benchwarmer: 0.68,
+    }[tierKey] || 0.98;
 
 
 
@@ -1248,9 +1312,12 @@ function generateBasketballLine(posKey, perf, career) {
        Position-based cap keeps bigs from posting guard-level scoring volume.
        Cap scales with career tier so a GOAT can post monster shot totals a
        bench player never will. */
-    const baseFGA = isBig ? r(8, 13) : (isGuard ? r(10, 17) : r(9, 15));
+    const ratingVolume = clamp((translatedOverall - 65) / 35, 0.12, 1.0);
+    const roleFga = isBig ? 5.5 + ratingVolume * 7.5
+        : (isGuard ? 6.5 + ratingVolume * 9.5 : 6 + ratingVolume * 8.5);
+    const baseFGA = clamp(Math.round((roleFga + randFloat(-1.4, 2.0)) * tierVolume), 3, 24);
     const fgaCap = Math.round((isBig ? 20 : 26) * ceil.vol);
-    const fga = clamp(Math.round((baseFGA + effective * 7 + ballHandlingAttr * 2) * gameModifier), 1, fgaCap);
+    const fga = clamp(Math.round((baseFGA + effective * 5 + ballHandlingAttr * 1.4) * gameModifier), 1, fgaCap);
 
     const fgPctBase = isBig ? (0.46 + effective * 0.14) : (0.40 + effective * 0.12);
     const hotShootingBonus = gameModifier >= 1.35 ? 0.06 : 0;
@@ -1270,57 +1337,75 @@ function generateBasketballLine(posKey, perf, career) {
         tpaBase = clamp(r(3, 6) + Math.round(threeAttr * 4), 0, 10);
         tp3Pct = clamp(0.31 + threeAttr * 0.11, 0.27, 0.42);
     }
+    tpaBase = Math.round(tpaBase * tierVolume);
     const tpaCap = Math.round((isBig ? 8 : 13) * ceil.vol);
-    const tpa = clamp(Math.round(tpaBase * gameModifier), 0, tpaCap);
-    const tpm = clamp(Math.round(tpa * tp3Pct), 0, Math.min(tpa, 15));
+    /* A three-point attempt is also a field-goal attempt, and every made
+       three is included in field goals made. Keeping those relationships
+       intact prevents impossible box scores and negative two-point makes. */
+    const tpa = clamp(Math.round(tpaBase * gameModifier), 0, Math.min(tpaCap, fga));
+    const tpm = clamp(Math.round(tpa * tp3Pct), 0, Math.min(tpa, fgm));
 
-    const ftCap = Math.round(14 * ceil.vol);
-    const ftMade = clamp(Math.round((effective * 5 + r(0, 2)) * gameModifier), 0, ftCap);
-
-    const rawPts = (fgm - tpm) * 2 + tpm * 3 + ftMade;
-    /* Nightly ceiling — bigs top out a bit lower than guards/wings, and the
-       ceiling itself scales with career tier (GOAT vs bench warmer). */
-    const nightlyCap = Math.round((isBig ? ceil.pts * 0.85 : ceil.pts));
-    const pts = clamp(rawPts, 0, nightlyCap);
+    const ftaCap = Math.round(14 * ceil.vol);
+    const ftaBase = Math.round((r(1, 3) + Math.round(effective * 5) + (isBig ? 1 : 0)) * tierVolume);
+    const fta = clamp(Math.round(ftaBase * gameModifier), 0, ftaCap);
+    const ftPct = clamp(0.62 + effective * 0.25, 0.55, 0.90);
+    const ftm = clamp(Math.round(fta * ftPct), 0, fta);
+    const pts = (fgm - tpm) * 2 + tpm * 3 + ftm;
 
 
     /* Rebounds — now factors the Rebounding attribute and Athleticism directly.
        rebMax scales with career tier so elite players can occasionally have
        a genuine monster boards night. */
     let rebBase, rebMax;
-    if (isC) { rebBase = r(4, 8) + effective * 7 + reboundingAttr * 5; rebMax = 23; }
-    else if (isPF) { rebBase = r(3, 7) + effective * 6 + reboundingAttr * 4; rebMax = 18; }
-    else if (isWing) { rebBase = r(1, 4) + effective * 3.5 + reboundingAttr * 3.5; rebMax = 11; }
-    else if (posKey === 'SG') { rebBase = r(1, 3) + effective * 2 + reboundingAttr * 2.5; rebMax = 7; }
-    else { /* PG */ rebBase = r(1, 3) + effective * 1.5 + reboundingAttr * 3 + athleticismAttr * 1.2; rebMax = 9; }
-    rebMax = Math.round(rebMax * ceil.reb);
-    const reb = clamp(Math.round(rebBase * (gameModifier > 1 ? 1.15 : 1.0)), 0, rebMax);
+    if (isC) { rebBase = r(4, 8) + effective * 7 + reboundingAttr * 5; rebMax = 32; }
+    else if (isPF) { rebBase = r(3, 7) + effective * 6 + reboundingAttr * 4; rebMax = 28; }
+    else if (isWing) { rebBase = r(1, 4) + effective * 3.5 + reboundingAttr * 3.5; rebMax = 22; }
+    else if (posKey === 'SG') { rebBase = r(1, 3) + effective * 2 + reboundingAttr * 2.5; rebMax = 18; }
+    else { /* PG */ rebBase = r(1, 3) + effective * 1.5 + reboundingAttr * 3 + athleticismAttr * 1.2; rebMax = 18; }
+    let reb = Math.round(rebBase * (gameModifier > 1 ? 1.12 : 1.0));
+    /* Rebound career highs should separate from a player's nightly average:
+       rare long-miss / high-motor games create believable outlier totals. */
+    if (Math.random() < (isBig ? 0.055 : 0.04)) reb += isBig ? randInt(4, 9) : randInt(2, 6);
+    reb = clamp(reb, 0, rebMax);
 
     /* Assists — now scales hard off the Passing attribute, since that's the
        whole point of investing skill points there as a PG. astMax scales
        with career tier. */
     let astBase, astMax;
-    if (isPG)        { astBase = r(1, 3) + effective * 2 + passingAttr * 6.5; astMax = 12; }
-    else if (posKey === 'SG') { astBase = r(0, 2) + effective * 1.5 + passingAttr * 4; astMax = 8; }
-    else if (isWing) { astBase = r(1, 3) + effective * 1.5 + passingAttr * 5; astMax = 10; }
-    else             { astBase = r(0, 2) + effective * 1 + passingAttr * 2.5; astMax = 6; }
-    astMax = Math.round(astMax * ceil.ast);
-    const ast = clamp(Math.round(astBase * (gameModifier > 1 ? 1.1 : 1.0)), 0, astMax);
+    if (isPG)        { astBase = r(1, 3) + effective * 2 + passingAttr * 6.5; astMax = 18; }
+    else if (posKey === 'SG') { astBase = r(0, 2) + effective * 1.5 + passingAttr * 4; astMax = 14; }
+    else if (isWing) { astBase = r(1, 3) + effective * 1.5 + passingAttr * 5; astMax = 15; }
+    else             { astBase = r(0, 2) + effective * 1 + passingAttr * 2.5; astMax = 12; }
+    astMax = Math.round(astMax * clamp(ceil.ast, 0.75, 1.35));
+    let ast = Math.round(astBase * (gameModifier > 1 ? 1.08 : 1.0));
+    if (Math.random() < (isPG ? 0.055 : 0.035)) ast += isPG ? randInt(5, 9) : randInt(3, 6);
+    ast = clamp(ast, 0, astMax);
 
-    const stlCap = Math.round(5 * ceil.stocks);
-    const stlRaw = r(0, 2) + (Math.random() < effective * 0.55 ? 1 : 0) + (gameModifier > 1.3 ? randInt(0, 2) : 0);
-    const stl = clamp(Math.round(stlRaw * ceil.stocks), 0, stlCap);
+    /* Sample steals and blocks as discrete defensive events. Low-rated guards
+       can still have a good defensive play, but a 43-block guard won't post
+       multi-block games because a hot shooting roll happened. */
+    const stealMean = (isGuard ? 0.30 : isWing ? 0.24 : 0.17)
+        + perimeterDefenseAttr * (isGuard ? 0.62 : isWing ? 0.45 : 0.30)
+        + effective * 0.12;
+    const stlCap = Math.round((isGuard ? 5 : 4) * clamp(ceil.stocks, 0.75, 1.35));
+    const stl = samplePoissonCount(stealMean * Math.sqrt(clamp(ceil.stocks, 0.7, 1.8)), stlCap);
 
-    let blkBase, blkMax;
-    if (isC)      { blkBase = 0.3 + blockingAttr * 3.2; blkMax = 9; }
-    else if (isPF){ blkBase = 0.15 + blockingAttr * 2.0; blkMax = 6; }
-    else if (isWing){ blkBase = 0.05 + blockingAttr * 1.7; blkMax = 4; }
-    else          { blkBase = 0.02 + blockingAttr * 1.0; blkMax = 3; } // guards
-    blkMax = Math.round(blkMax * ceil.stocks);
-    const blkRaw = blkBase + randFloat(-0.6, 0.7) + (gameModifier > 1.3 ? randFloat(0, 1.5) : 0);
-    const blk = clamp(Math.round(blkRaw * ceil.stocks), 0, blkMax);
+    let blockMean, blkMax;
+    if (isC)        { blockMean = 0.35 + blockingAttr * 2.65; blkMax = 9; }
+    else if (isPF)  { blockMean = 0.20 + blockingAttr * 1.75; blkMax = 6; }
+    else if (isWing){ blockMean = 0.07 + blockingAttr * 1.05; blkMax = 4; }
+    else            { blockMean = 0.015 + blockingAttr * 0.42; blkMax = 3; }
+    const blockRating = attrs['Shot Blocking'] ?? 40;
+    if (isGuard && blockRating <= 55) blkMax = 1;
+    blkMax = Math.round(blkMax * clamp(ceil.stocks, 0.75, 1.35));
+    const blk = samplePoissonCount(blockMean * Math.sqrt(clamp(ceil.stocks, 0.7, 1.8)), blkMax);
 
-    return { gp: 1, pts, reb, ast, stl, blk, fgm, fga, tpm, tpa };
+    const tovBase = (isPG ? 1.2 : isGuard ? 0.8 : isWing ? 0.7 : 0.6)
+        + effective * 1.3 + fga / 18 + randFloat(-0.7, 1);
+    const tov = clamp(Math.round(tovBase), 0, 8);
+    const pf = clamp(r(1, 3) + (isBig ? 1 : 0) + Math.round((1 - athleticismAttr) * 0.5), 0, 6);
+
+    return { gp: 1, pts, reb, ast, stl, blk, fgm, fga, tpm, tpa, ftm, fta, tov, pf };
 }
 function battingTierBand(overall) {
     if (overall >= 95) return { avg: [.295, .325], hr: [30, 45], rbi: [90, 120] };
@@ -1343,11 +1428,13 @@ function getBattingSeasonTarget(career, band) {
     }
     return career._battingTargetSeason;
 }
-function generateBaseballLine(posKey, perf, career) {
+function generateBaseballLine(posKey, perf, career, gameContext = null) {
     const isPitcher = ['SP', 'RP'].includes(posKey);
     const p = perf / 100;
     const powerAttr = career ? clamp(((career.attributes['Power'] ?? 65) - 25) / 74, 0, 1) : p;
     const contactAttr = career ? clamp(((career.attributes['Contact'] ?? 65) - 25) / 74, 0, 1) : p;
+    const disciplineAttr = career ? clamp(((career.attributes['Plate Discipline'] ?? 65) - 25) / 74, 0, 1) : p;
+    const speedAttr = career ? clamp(((career.attributes['Speed'] ?? 65) - 25) / 74, 0, 1) : p;
     if (isPitcher) {
         const isStarter = posKey === 'SP';
         const ip = isStarter ? roundToThirds(clamp(4.2 + p * 2.6 + randFloat(-0.6, 0.6), 2, 9)) : roundToThirds(clamp(0.7 + p * 1.2 + randFloat(-0.2, 0.4), 0.3, 3));
@@ -1359,7 +1446,8 @@ function generateBaseballLine(posKey, perf, career) {
         const w = Math.random() < winChance ? 1 : 0;
         const l = (!w && p < 0.4 && Math.random() < 0.4) ? 1 : 0;
         const sv = (!isStarter && p > 0.78 && Math.random() < 0.3) ? 1 : 0;
-        return { gp: 1, ip, h, er, bb, k, w, l, sv };
+        const hrAllowed = clamp(Math.round(ip * clamp(0.22 - p * 0.14, 0.04, 0.28) * randFloat(0.55, 1.5)), 0, 4);
+        return { gp: 1, ip, h, er, bb, k, hrAllowed, w, l, sv };
     } else {
         const ab = r(3, 5);
         const overall = career ? career.overall : clamp(Math.round(40 + p * 59), 40, 99);
@@ -1367,7 +1455,7 @@ function generateBaseballLine(posKey, perf, career) {
         const target = career ? getBattingSeasonTarget(career, band)
             : { avg: randFloat(band.avg[0], band.avg[1]), hr: randInt(band.hr[0], band.hr[1]), rbi: randInt(band.rbi[0], band.rbi[1]) };
 
-        const hitProb = clamp(target.avg + randFloat(-0.035, 0.035), 0.15, 0.37);
+        const hitProb = clamp(target.avg + (contactAttr - 0.55) * 0.055 + randFloat(-0.025, 0.025), 0.15, 0.38);
         let h = 0; for (let i = 0; i < ab; i++) if (Math.random() < hitProb) h++;
 
         /* HR chance is anchored to a season target from the batting tier band,
@@ -1376,7 +1464,7 @@ function generateBaseballLine(posKey, perf, career) {
         const totalGames = LEAGUE_SHAPE.baseball.games;
         const gamesSoFar = career ? (career.seasonStats.gp || 0) : 0;
         const hrSoFar = career ? (career.seasonStats.hr || 0) : 0;
-        const expectedHrPerGame = target.hr / totalGames;
+        const expectedHrPerGame = target.hr * clamp(0.55 + powerAttr * 0.85, 0.5, 1.4) / totalGames;
         const avgHitsPerGame = Math.max(4 * hitProb, 0.3);
         const paceFactor = gamesSoFar >= 10
             ? clamp(1 - ((hrSoFar / gamesSoFar) - expectedHrPerGame) * 6, 0.35, 1.4)
@@ -1384,13 +1472,38 @@ function generateBaseballLine(posKey, perf, career) {
         const perHitHrChance = clamp((expectedHrPerGame / avgHitsPerGame) * paceFactor, 0, 0.5);
         let hr = 0; for (let i = 0; i < h; i++) { if (Math.random() < perHitHrChance) hr++; }
 
-        const rbi = clamp((h - hr) * (Math.random() < 0.35 ? 1 : 0) + hr * r(1, 2) + (Math.random() < 0.15 ? 1 : 0), 0, 7);
-        const rr = clamp((h > 0 ? r(0, 1) : 0) + (Math.random() < p * 0.3 ? 1 : 0), 0, 4);
-        const sb = (Math.random() < 0.08 + p * 0.05) ? 1 : 0;
-        const bb = (Math.random() < 0.18) ? 1 : 0;
+        let doubles = 0, triples = 0;
+        for (let i = 0; i < h - hr; i++) {
+            const hitTypeRoll = Math.random();
+            if (hitTypeRoll < 0.015 + speedAttr * 0.055) triples++;
+            else if (hitTypeRoll < 0.20 + powerAttr * 0.13) doubles++;
+        }
+        let totalBases = (h - hr - doubles - triples) + doubles * 2 + triples * 3 + hr * 4;
+        const plateAppearances = ab + 1;
+        const walkChance = clamp(0.055 + disciplineAttr * 0.07, 0.05, 0.14);
+        let bb = 0, hbp = 0;
+        for (let i = 0; i < plateAppearances; i++) {
+            const outcome = Math.random();
+            if (outcome < 0.012) hbp++;
+            else if (outcome < 0.012 + walkChance) bb++;
+        }
+        let sf = Math.random() < 0.055 ? 1 : 0;
+        let rbi = clamp((h - hr) * (Math.random() < 0.35 ? 1 : 0) + hr * r(1, 2) + (Math.random() < 0.15 ? 1 : 0), 0, 7);
+        let rr = clamp((h > 0 ? r(0, 1) : 0) + (bb > 0 && Math.random() < 0.2 ? 1 : 0) + (Math.random() < p * 0.25 ? 1 : 0), 0, 4);
+        if (gameContext && Number.isFinite(gameContext.teamScore)) {
+            const teamRuns = clamp(Math.floor(gameContext.teamScore), 0, 30);
+            /* A batter cannot drive in or score more runs than the entire team
+               scored; a solo homer also necessarily accounts for one team run. */
+            hr = Math.min(hr, teamRuns);
+            totalBases = (h - hr - doubles - triples) + doubles * 2 + triples * 3 + hr * 4;
+            rbi = clamp(Math.max(hr, rbi), 0, teamRuns);
+            rr = clamp(rr, 0, teamRuns);
+            if (teamRuns === 0) sf = 0;
+        }
+        const sb = (Math.random() < 0.06 + speedAttr * 0.12) ? 1 : 0;
         const kRate = clamp(0.28 - p * 0.14, 0.08, 0.32);
         let so = 0; for (let i = 0; i < (ab - h); i++) if (Math.random() < kRate) so++;
-        return { gp: 1, ab, h, hr, rbi, r: rr, sb, bb, so };
+        return { gp: 1, ab, h, doubles, triples, hr, tb: totalBases, rbi, r: rr, sb, bb, hbp, sf, so };
     }
 }
 function round1(n) { return Math.round(n * 10) / 10; }
@@ -1408,6 +1521,50 @@ function formatIP(n) {
 
 
 
+function simulateGolfRound(perf) {
+    const p = clamp(perf, 0, 1);
+    const chances = {
+        eagle: 0.002 + p * 0.012,
+        birdie: 0.06 + p * 0.28,
+        doubleBogey: 0.10 - p * 0.07,
+        bogey: 0.34 - p * 0.24,
+    };
+    let eagles = 0, birdies = 0, pars = 0, bogeys = 0, doubleBogeys = 0, strokes = 0;
+    for (let hole = 0; hole < 18; hole++) {
+        const roll = Math.random();
+        if (roll < chances.eagle) { eagles++; strokes += 2; }
+        else if (roll < chances.eagle + chances.birdie) { birdies++; strokes += 3; }
+        else if (roll < chances.eagle + chances.birdie + chances.doubleBogey + chances.bogey) {
+            const bogeyRoll = roll - chances.eagle - chances.birdie;
+            if (bogeyRoll < chances.doubleBogey) { doubleBogeys++; strokes += 6; }
+            else { bogeys++; strokes += 5; }
+        } else { pars++; strokes += 4; }
+    }
+    let fairwaysHit = 0;
+    for (let hole = 0; hole < 14; hole++) if (Math.random() < 0.48 + p * 0.28) fairwaysHit++;
+    let greensInRegulation = 0;
+    for (let hole = 0; hole < 18; hole++) if (Math.random() < 0.36 + p * 0.35) greensInRegulation++;
+    const putts = clamp(Math.round(36 - p * 4.4 + randFloat(-2.4, 2.4)), 20, 40);
+    return { rounds: 1, strokesTotal: strokes, relToPar: strokes - 72,
+        eagles, birdies, pars, bogeys, doubleBogeys,
+        fairwaysHit, fairwayChances: 14, greensInRegulation, putts };
+}
+function simulateGolfRounds(perf, count) {
+    const total = { rounds: 0, strokesTotal: 0, relToPar: 0,
+        eagles: 0, birdies: 0, pars: 0, bogeys: 0, doubleBogeys: 0,
+        fairwaysHit: 0, fairwayChances: 0, greensInRegulation: 0, putts: 0 };
+    for (let i = 0; i < count; i++) {
+        const round = simulateGolfRound(perf);
+        Object.keys(total).forEach(key => { total[key] += round[key] || 0; });
+    }
+    return total;
+}
+function combineGolfRounds(a, b) {
+    if (!b) return { ...a };
+    const combined = { ...a };
+    Object.keys(combined).forEach(key => { combined[key] += b[key] || 0; });
+    return combined;
+}
 function simulateBowlingEvent(career) {
     const p = performanceScore(career) / 100;
     const games = 6;
@@ -1420,17 +1577,10 @@ function simulateBowlingEvent(career) {
 }
 function simulateGolfEvent(career) {
     const p = performanceScore(career) / 100;
-    const par = 72;
-    const roundScore = () => clamp(Math.round(par - p * 7 + randFloat(-4.5, 4.5)), 62, 88);
-    const r1 = roundScore(), r2 = roundScore();
-    const throughTwo = r1 + r2;
-    const cutLine = par * 2 + 4;
-    const madeCut = throughTwo <= cutLine || Math.random() < clamp(p - 0.3, 0, 0.9);
-    let rounds = [r1, r2];
-    if (madeCut) { rounds.push(roundScore()); rounds.push(roundScore()); }
-    const strokesTotal = rounds.reduce((a, b) => a + b, 0);
-    const relToPar = strokesTotal - rounds.length * par;
-    return { rounds: rounds.length, strokesTotal, relToPar, madeCut, perf: p };
+    const firstTwo = simulateGolfRounds(p, 2);
+    const madeCut = firstTwo.strokesTotal <= 148;
+    const line = combineGolfRounds(firstTwo, madeCut ? simulateGolfRounds(p, 2) : null);
+    return { ...line, madeCut, perf: p };
 }
 
 
@@ -1518,7 +1668,9 @@ function generateLeague(sport) {
                 mascot: t.mascot,
                 conference: t.conf,
                 division: t.div,
-                rating: clamp(Math.round(randNormal(74, 9)), 55, 97),
+                rating: sport === 'baseball'
+                    ? clamp(Math.round(randNormal(74, 4.55)), 65, 83)
+                    : clamp(Math.round(randNormal(74, 9)), 55, 97),
                 wins: 0, losses: 0, ties: 0,
                 pf: 0, pa: 0,
                 streak: 0,
@@ -1591,7 +1743,7 @@ function homeFieldEdge() { return 2.2; }
 function winProbability(ratingA, ratingB, sport) {
     // Longer seasons (NBA/MLB) need a flatter curve or rating gaps compound
     // into unrealistic 70-win dynasties. Shorter NFL seasons can stay steeper.
-    const divisor = sport === 'basketball' ? 16 : sport === 'baseball' ? 18 : 11;
+    const divisor = sport === 'basketball' ? 16 : sport === 'baseball' ? 36 : 11;
     return 1 / (1 + Math.pow(10, -(ratingA - ratingB) / divisor));
 }
 function generateScore(sport, winnerRating, loserRating) {
@@ -1606,9 +1758,17 @@ function generateScore(sport, winnerRating, loserRating) {
         const winnerScore = clamp(loserScore + r(2, 14) + Math.round(gap * 0.8), loserScore + 1, 134);
         return { winnerScore, loserScore };
     }
-    const loserScore = clamp(r(0, 4), 0, 9);
-    const winnerScore = clamp(loserScore + r(1, 5) + (gap > 4 ? 1 : 0), loserScore + 1, 13);
+    const winnerRuns = clamp(3.8 + (winnerRating - 74) * 0.03, 2.5, 5.3);
+    const loserRuns = clamp(3.7 + (loserRating - 74) * 0.03, 2.5, 5.1);
+    const loserScore = samplePoissonCount(loserRuns, 12);
+    const winnerScore = clamp(Math.max(loserScore + 1, samplePoissonCount(winnerRuns, 13)), loserScore + 1, 14);
     return { winnerScore, loserScore };
+}
+function baseballScoreForOutcome(userWon, userRating = 74, opponentRating = 74) {
+    const score = generateScore('baseball', Math.max(userRating, opponentRating), Math.min(userRating, opponentRating));
+    return userWon
+        ? { teamScore: score.winnerScore, oppScore: score.loserScore }
+        : { teamScore: score.loserScore, oppScore: score.winnerScore };
 }
 function applyResult(league, sport, homeId, awayId, homeScore, awayScore) {
     const home = teamById(league, homeId), away = teamById(league, awayId);
@@ -1757,11 +1917,10 @@ function simulateTourEvent(career) {
     const sport = career.sport;
     const shape = TOUR_SHAPE[sport];
     const randomRivals = pickN(career.tour.rivals, shape.fieldSize - 1);
-    const field = randomRivals.map(rv => ({ ref: rv, name: rv.name, rating: rv.rating }));
-    let userScoreMetric, userLine, madeCut = true;
+    const field = randomRivals.map(rv => ({ ref: rv, name: rv.name, rating: rv.rating, isUser: false }));
+    let userLine, madeCut = true;
     if (sport === 'bowling') {
         const res = simulateBowlingEvent(career);
-        userScoreMetric = res.pinfall;
         userLine = res;
         field.forEach(f => {
             let pins = 0;
@@ -1769,23 +1928,50 @@ function simulateTourEvent(career) {
             f.metric = pins;
         });
     } else {
-        const res = simulateGolfEvent(career);
-        userScoreMetric = -res.relToPar;
-        userLine = res; madeCut = res.madeCut;
+        const userPerf = performanceScore(career) / 100;
+        field.push({ ref: null, name: career.name, rating: userPerf * 100, isUser: true });
+        field.forEach(f => { f.firstTwo = simulateGolfRounds(f.rating / 100, 2); });
+
+        /* The cut is based on the actual two-round scores across this event's
+           field. Ties at the cut line advance, as they do in real tournaments. */
+        const earlyBoard = field.slice().sort((a, b) => a.firstTwo.strokesTotal - b.firstTwo.strokesTotal);
+        const cutRank = Math.min(64, earlyBoard.length - 1);
+        const cutLine = earlyBoard[cutRank].firstTwo.strokesTotal;
         field.forEach(f => {
-            const par = 72;
-            const rs = () => clamp(Math.round(par - (f.rating / 100) * 7 + randFloat(-4.5, 4.5)), 62, 88);
-            const rounds = [rs(), rs(), rs(), rs()];
-            f.metric = -(rounds.reduce((a, b) => a + b, 0) - rounds.length * par);
+            f.madeCut = f.firstTwo.strokesTotal <= cutLine;
+            f.line = combineGolfRounds(f.firstTwo, f.madeCut ? simulateGolfRounds(f.rating / 100, 2) : null);
+            f.metric = -f.line.relToPar;
         });
+        field.sort((a, b) => {
+            if (a.madeCut !== b.madeCut) return a.madeCut ? -1 : 1;
+            const scoreA = a.madeCut ? a.line.strokesTotal : a.firstTwo.strokesTotal;
+            const scoreB = b.madeCut ? b.line.strokesTotal : b.firstTwo.strokesTotal;
+            return scoreA - scoreB;
+        });
+        field.forEach((f, i) => {
+            const prev = field[i - 1];
+            const sameFinish = prev && prev.madeCut === f.madeCut &&
+                (f.madeCut ? prev.line.strokesTotal === f.line.strokesTotal : prev.firstTwo.strokesTotal === f.firstTwo.strokesTotal);
+            f.place = sameFinish ? prev.place : i + 1;
+            if (!f.isUser) f.ref.seasonPoints = (f.ref.seasonPoints || 0) + pointsForRank(f.place);
+        });
+        const user = field.find(f => f.isUser);
+        userLine = { ...user.line, madeCut: user.madeCut, perf: userPerf };
+        madeCut = user.madeCut;
+        const place = user.place;
+        const tied = field.filter(f => f.madeCut === user.madeCut &&
+            (user.madeCut ? f.line.strokesTotal === user.line.strokesTotal : f.firstTwo.strokesTotal === user.firstTwo.strokesTotal)).length > 1;
+        const earnings = madeCut ? purseForRank(place, field.length, sport) : Math.round(purseForRank(field.length - 5, field.length, sport) * 0.3);
+        const points = madeCut ? pointsForRank(place) : 1;
+        return { place, tied, fieldSize: field.length, earnings, points, madeCut, line: userLine, leaderboard: field.slice(0, 10) };
     }
-    field.push({ name: career.name, metric: userScoreMetric, isUser: true });
+    field.push({ name: career.name, metric: userLine.pinfall, isUser: true });
     field.sort((a, b) => b.metric - a.metric);
     field.forEach((f, i) => { if (!f.isUser) f.ref.seasonPoints = (f.ref.seasonPoints || 0) + pointsForRank(i + 1); });
     let place = field.findIndex(f => f.isUser) + 1;
-    const tiedAtSameMetric = field.filter(f => f.metric === userScoreMetric).length > 1;
-    const earnings = madeCut ? purseForRank(place, field.length, sport) : Math.round(purseForRank(field.length - 5, field.length, sport) * 0.3);
-    const points = madeCut ? pointsForRank(place) : 1;
+    const tiedAtSameMetric = field.filter(f => f.metric === userLine.pinfall).length > 1;
+    const earnings = purseForRank(place, field.length, sport);
+    const points = pointsForRank(place);
     return { place, tied: tiedAtSameMetric, fieldSize: field.length, earnings, points, madeCut, line: userLine, leaderboard: field.slice(0, 10) };
 }
 
@@ -1846,17 +2032,17 @@ function isFullyMaxed(career) {
        has hit its tier ceiling (so no attribute upgrade is legal anymore),
        conditioning is capped, and every remaining badge is permanently out
        of reach because its overall requirement sits above this tier's cap. */
-    const cap = TIER_OVERALL_CAPS[career.tier || DEFAULT_TIER] ?? 99;
+    const cap = tierOverallCap(career.sport, career.tier);
     const overallMaxed = career.overall >= cap;
     const conditioningMaxed = career.conditioning >= ATTR_MAX;
     const badgesMaxed = badgesAvailableToUnlock(career).every(b => b.minOverall > cap);
     return overallMaxed && conditioningMaxed && badgesMaxed;
 }
-function genStatline(career, perf) {
+function genStatline(career, perf, gameContext = null) {
     const sport = career.sport, pos = career.position || 'GEN';
     if (sport === 'football') return generateFootballLine(pos, perf, career);
     if (sport === 'basketball') return generateBasketballLine(pos, perf, career); // ← pass career
-    if (sport === 'baseball') return generateBaseballLine(pos, perf, career);
+    if (sport === 'baseball') return generateBaseballLine(pos, perf, career, gameContext);
 }
 function statlineSummary(sport, posKey, line) {
     const group = sport === 'football' ? posInfo('football', posKey).group : (sport === 'baseball' ? statGroupFor('baseball', posKey) : null);
@@ -1869,7 +2055,12 @@ function statlineSummary(sport, posKey, line) {
         if (group === 'secondary') return `${line.tackles} tkl, ${line.ints} INT, ${line.passDef} PD`;
         if (group === 'kicker') return `${line.fgm}/${line.fga} FG, ${line.points} pts`;
     }
-    if (sport === 'basketball') {         const fgPct = line.fga ? Math.round((line.fgm / line.fga) * 100) : 0;         const tpPct = line.tpa ? Math.round((line.tpm / line.tpa) * 100) : 0;         const shootingBit = line.tpa >= 3 && tpPct >= fgPct             ? `${line.tpm}/${line.tpa} 3PT (${tpPct}%)`             : `${line.fgm}/${line.fga} FG (${fgPct}%)`;         return `${line.pts} pts, ${line.reb} reb, ${line.ast} ast, ${line.stl} stl, ${line.blk} blk, ${shootingBit}`;     }
+    if (sport === 'basketball') {
+        const fgPct = line.fga ? Math.round(line.fgm / line.fga * 100) : 0;
+        const tpPct = line.tpa ? Math.round(line.tpm / line.tpa * 100) : 0;
+        const ftPct = line.fta ? Math.round(line.ftm / line.fta * 100) : 0;
+        return `${line.pts} pts, ${line.reb} reb, ${line.ast} ast, ${line.stl} stl, ${line.blk} blk, ${line.tov} TO — ${line.fgm}/${line.fga} FG (${fgPct}%), ${line.tpm}/${line.tpa} 3P (${tpPct}%), ${line.ftm}/${line.fta} FT (${ftPct}%)`;
+    }
     if (sport === 'baseball') {
         if (group === 'pitcher') return `${formatIP(line.ip)} IP, ${line.er} ER, ${line.k} K`;
         return `${line.h}-${line.ab}, ${line.hr} HR, ${line.rbi} RBI`;
@@ -1884,6 +2075,26 @@ function statlineSummary(sport, posKey, line) {
 
 
 
+function addPreProIndividualStats(career, line) {
+    let totals;
+    if (career.sport === 'bowling') {
+        totals = { eventsPlayed: 1, games: line.games || 0, pinfall: line.pinfall || 0,
+            highGame: line.highGame || 0, titles: 0, top5: 0, cashes: 0, earnings: 0, points: 0 };
+        addStatTotals(career.seasonStats, totals);
+        career.seasonStats.highGame = Math.max(career.seasonStats.highGame || 0, line.highGame || 0);
+    } else if (career.sport === 'golf') {
+        totals = { eventsPlayed: 1, cutsMade: line.madeCut ? 1 : 0, wins: 0, top10: 0,
+            roundsPlayed: line.rounds || 0, strokesTotal: line.strokesTotal || 0,
+            eagles: line.eagles || 0, birdies: line.birdies || 0, pars: line.pars || 0,
+            bogeys: line.bogeys || 0, doubleBogeys: line.doubleBogeys || 0,
+            fairwaysHit: line.fairwaysHit || 0, fairwayChances: line.fairwayChances || 0,
+            greensInRegulation: line.greensInRegulation || 0, putts: line.putts || 0,
+            earnings: 0, points: 0 };
+        addStatTotals(career.seasonStats, totals);
+    }
+    if (totals) updateCareerHighs(career, totals);
+}
+
 /* ----------------------------------------------------------------------
    11. STAGE PROGRESSION ENGINE
    ---------------------------------------------------------------------- */
@@ -1891,11 +2102,14 @@ function simulateHighSchoolGame(career) {
     const perf = performanceScore(career);
     const opponent = `${pick(CITY_NAMES)} High School`;
     const won = Math.random() < clamp(0.4 + perf / 250, 0.25, 0.88);
+    const baseballScore = career.sport === 'baseball'
+        ? baseballScoreForOutcome(won, 70 + perf * 0.08, 74) : null;
     let line = null, summary = '';
-    if (career.sport === 'bowling') { const res = simulateBowlingEvent(career); line = res; summary = `Avg ${res.avg.toFixed(1)}, high game ${res.highGame}`; }
-    else if (career.sport === 'golf') { const res = simulateGolfEvent(career); line = res; summary = `${res.strokesTotal} strokes (${res.relToPar >= 0 ? '+' : ''}${res.relToPar})`; }
-    else { line = genStatline(career, perf); addStatTotals(career.seasonStats, line); updateCareerHighs(career, line); summary = statlineSummary(career.sport, career.position, line); }
-    const entry = { type: 'highschool', label: `${career.highSchool.name} vs ${opponent}`, opponent, won, summary, perf, t: Date.now() };
+    if (career.sport === 'bowling') { const res = simulateBowlingEvent(career); line = res; addPreProIndividualStats(career, line); summary = `Avg ${res.avg.toFixed(1)}, high game ${res.highGame}`; }
+    else if (career.sport === 'golf') { const res = simulateGolfEvent(career); line = res; addPreProIndividualStats(career, line); summary = `${res.strokesTotal} strokes (${res.relToPar >= 0 ? '+' : ''}${res.relToPar})`; }
+    else { line = genStatline(career, perf, baseballScore); addStatTotals(career.seasonStats, line); updateCareerHighs(career, line); summary = statlineSummary(career.sport, career.position, line); }
+    const entry = { type: 'highschool', label: `${career.highSchool.name} vs ${opponent}`, opponent, won,
+        score: baseballScore ? `${baseballScore.teamScore}-${baseballScore.oppScore}` : null, summary, perf, t: Date.now() };
     career.highSchool.games.push(entry);
     career.highSchool.gamesPlayed++;
     logGame(career, entry);
@@ -1940,11 +2154,14 @@ function simulateCollegeGame(career) {
     const perf = performanceScore(career);
     const opponent = randomCollegeName();
     const won = Math.random() < clamp(0.42 + perf / 240, 0.25, 0.88);
+    const baseballScore = career.sport === 'baseball'
+        ? baseballScoreForOutcome(won, 70 + perf * 0.08, 74) : null;
     let line = null, summary = '';
-    if (career.sport === 'bowling') { const res = simulateBowlingEvent(career); line = res; summary = `Avg ${res.avg.toFixed(1)}, high game ${res.highGame}`; }
-    else if (career.sport === 'golf') { const res = simulateGolfEvent(career); line = res; summary = `${res.strokesTotal} strokes (${res.relToPar >= 0 ? '+' : ''}${res.relToPar})`; }
-    else { line = genStatline(career, perf); addStatTotals(career.seasonStats, line); updateCareerHighs(career, line); summary = statlineSummary(career.sport, career.position, line); }
-    const entry = { type: 'college', label: `${career.college.name} vs ${opponent}`, opponent, won, summary, perf, t: Date.now() };
+    if (career.sport === 'bowling') { const res = simulateBowlingEvent(career); line = res; addPreProIndividualStats(career, line); summary = `Avg ${res.avg.toFixed(1)}, high game ${res.highGame}`; }
+    else if (career.sport === 'golf') { const res = simulateGolfEvent(career); line = res; addPreProIndividualStats(career, line); summary = `${res.strokesTotal} strokes (${res.relToPar >= 0 ? '+' : ''}${res.relToPar})`; }
+    else { line = genStatline(career, perf, baseballScore); addStatTotals(career.seasonStats, line); updateCareerHighs(career, line); summary = statlineSummary(career.sport, career.position, line); }
+    const entry = { type: 'college', label: `${career.college.name} vs ${opponent}`, opponent, won,
+        score: baseballScore ? `${baseballScore.teamScore}-${baseballScore.oppScore}` : null, summary, perf, t: Date.now() };
     career.college.games.push(entry);
     career.college.gamesPlayed++;
     logGame(career, entry);
@@ -2144,11 +2361,13 @@ function simulateMinorsGame(career) {
     const perf = performanceScore(career);
     const opponent = `${pick(CITY_NAMES)} ${pick(MASCOTS)} (AA)`;
     const won = Math.random() < clamp(0.45 + perf / 260, 0.3, 0.85);
-    const line = generateBaseballLine(career.position, perf, career);
+    const baseballScore = baseballScoreForOutcome(won, 70 + perf * 0.08, 74);
+    const line = generateBaseballLine(career.position, perf, career, baseballScore);
     addStatTotals(career.seasonStats, line);
     updateCareerHighs(career, line);
     const summary = statlineSummary('baseball', career.position, line);
-    const entry = { type: 'minors', label: `${career.minors.affiliateName} vs ${opponent}`, opponent, won, summary, perf, t: Date.now() };
+    const entry = { type: 'minors', label: `${career.minors.affiliateName} vs ${opponent}`, opponent, won,
+        score: `${baseballScore.teamScore}-${baseballScore.oppScore}`, summary, perf, t: Date.now() };
     career.minors.games.push(entry);
     career.minors.gamesPlayed++;
     logGame(career, entry);
@@ -2260,7 +2479,7 @@ function simulateProGame(career) {
 
     const result = simulateLeagueWeek(league, career.sport, career.team, career);
     if (!result) return null;
-    const line = genStatline(career, result.perf);
+    const line = genStatline(career, result.perf, { teamScore: result.teamScore, oppScore: result.oppScore });
     addStatTotals(career.seasonStats, line);
     updateCareerHighs(career, line);
     const summary = statlineSummary(career.sport, career.position, line);
@@ -2472,13 +2691,18 @@ function simulateSeriesGameForUser(series, career, tierBoost) {
     else if (series.winsB >= series.winsNeeded) series.winner = series.teamB;
     const userWon = isTeamA ? aWins : !aWins;
     const opp = isTeamA ? series.teamB : series.teamA;
-    const line = genStatline(career, perf);
+    const winner = aWins ? series.teamA : series.teamB;
+    const loser = aWins ? series.teamB : series.teamA;
+    const gameScore = generateScore(sport, winner.rating, loser.rating);
+    const userScore = userWon ? gameScore.winnerScore : gameScore.loserScore;
+    const opponentScore = userWon ? gameScore.loserScore : gameScore.winnerScore;
+    const line = genStatline(career, perf, { teamScore: userScore, oppScore: opponentScore });
     if (!career.seasonPlayoffStats) career.seasonPlayoffStats = newStatTotals(career.sport, career.position || 'GEN');
     addStatTotals(career.seasonPlayoffStats, line);
     updateCareerHighs(career, line, true);
     const summary = statlineSummary(career.sport, career.position, line);
     const pts = awardPoints(career, 'pro', perf, career.sport);
-    return { userWon, opp, summary, perf, pts };
+    return { userWon, opp, summary, perf, pts, score: `${userScore}-${opponentScore}` };
 }
 function nextRoundFromSeries(seriesList, byeTeams) {
     const winners = seriesList.map(s => s.winner).sort((a, b) => a.seed - b.seed);
@@ -2545,9 +2769,9 @@ function simulatePlayoffStep(career) {
                 const res = simulateSeriesGameForUser(userSeries, career, tierBoost);
                 const roundName = c.roundNames[Math.min(c.roundIndex, c.roundNames.length - 1)];
                 const scoreStr = `${userSeries.winsA}-${userSeries.winsB}`;
-                logGame(career, { type: 'pro', label: `${roundName} vs ${res.opp.name} (Series ${scoreStr})`, won: res.userWon, summary: res.summary, perf: res.perf, t: Date.now() });
-                logHistory(career, `${roundName} Game: ${res.userWon ? 'Won' : 'Lost'} vs ${res.opp.name} (series ${scoreStr}) — ${res.summary} (+${res.pts} skill pts)`);
-                userGameResult = { conf: c.conf, round: roundName, won: res.userWon, summary: res.summary, opponent: res.opp.name, seriesScore: scoreStr };
+                logGame(career, { type: 'pro', label: `${roundName} vs ${res.opp.name} (Series ${scoreStr})`, won: res.userWon, score: res.score, summary: res.summary, perf: res.perf, t: Date.now() });
+                logHistory(career, `${roundName} Game: ${res.userWon ? 'Won' : 'Lost'} ${res.score} vs ${res.opp.name} (series ${scoreStr}) — ${res.summary} (+${res.pts} skill pts)`);
+                userGameResult = { conf: c.conf, round: roundName, won: res.userWon, score: res.score, summary: res.summary, opponent: res.opp.name, seriesScore: scoreStr };
                 if (userSeries.winner && userSeries.winner.id !== career.team) playoffs.userEliminatedRound = `${c.conf} ${roundName}`;
             }
             if (c.currentSeries.every(s => s.winner)) {
@@ -2580,9 +2804,9 @@ function simulatePlayoffStep(career) {
         if (involvesUser && !series.winner) {
             const res = simulateSeriesGameForUser(series, career, tierBoost);
             const scoreStr = `${series.winsA}-${series.winsB}`;
-            logGame(career, { type: 'pro', label: `Championship vs ${res.opp.name} (Series ${scoreStr})`, won: res.userWon, summary: res.summary, perf: res.perf, t: Date.now() });
-            logHistory(career, `Championship Game: ${res.userWon ? 'Won' : 'Lost'} vs ${res.opp.name} (series ${scoreStr}) — ${res.summary} (+${res.pts} skill pts)`);
-            userGameResult = { conf: 'Championship', round: 'Championship', won: res.userWon, summary: res.summary, opponent: res.opp.name, seriesScore: scoreStr };
+            logGame(career, { type: 'pro', label: `Championship vs ${res.opp.name} (Series ${scoreStr})`, won: res.userWon, score: res.score, summary: res.summary, perf: res.perf, t: Date.now() });
+            logHistory(career, `Championship Game: ${res.userWon ? 'Won' : 'Lost'} ${res.score} vs ${res.opp.name} (series ${scoreStr}) — ${res.summary} (+${res.pts} skill pts)`);
+            userGameResult = { conf: 'Championship', round: 'Championship', won: res.userWon, score: res.score, summary: res.summary, opponent: res.opp.name, seriesScore: scoreStr };
             if (series.winner && series.winner.id !== career.team) playoffs.userEliminatedRound = 'Championship';
         } else if (!series.winner) {
             resolveSeriesInstantly(series, sport, career.team, tierBoost);
@@ -2808,8 +3032,13 @@ function buildAwardLeaderboard(career, key) {
     }
     if (key === 'dpoy') userVal *= dpoyPositionWeight(sport, career.position);
     if (key === 'mvp') userVal *= mvpPositionWeight(sport, career.position);
-    /* Elite overalls shouldn't realistically miss an All-Star selection */
-    if (key === 'allstar' && career.overall >= 90) userVal = Math.max(userVal, career.overall - 6);
+    /* Strong NFL starters should have a credible Pro Bowl path even though
+       the career-mode stat scale is lower than a full roster-rating average. */
+    if (key === 'allstar' && sport === 'football') {
+        userVal = Math.max(userVal, career.overall + 4);
+    } else if (key === 'allstar' && career.overall >= 90) {
+        userVal = Math.max(userVal, career.overall - 6);
+    }
 
 
 
@@ -2819,7 +3048,9 @@ function buildAwardLeaderboard(career, key) {
 
 
     const tier = CAREER_TIERS[career.tier || DEFAULT_TIER] || CAREER_TIERS[DEFAULT_TIER];
-    const bias = Math.round((tier.awardBias - 1) * 12);
+    const bias = sport === 'football' && key === 'allstar'
+        ? 0
+        : Math.round((tier.awardBias - 1) * 12);
     /* Cache the field's names/grades once per season+award so refreshing the
        page doesn't reshuffle or duplicate other players — only your own
        rank recalculates as you keep playing. */
@@ -2893,7 +3124,8 @@ function finalizeSeasonAwards(career, playoffResult) {
         const board = getAwardBoard(career, key);
         const total = board.total;
         if (key === 'allstar') {
-            const won = board.rank <= Math.max(1, Math.ceil(total * 0.35));
+            const selectionRate = sport === 'football' ? 0.45 : 0.35;
+            const won = board.rank <= Math.max(1, Math.ceil(total * selectionRate));
             items.push({ key, label: labels.allstar, won, rank: board.rank, total: board.total });
             if (sport === 'basketball') {
                 let teamTier = null;
@@ -3076,9 +3308,16 @@ function startNewProSeason(career) {
     archivePlayoffSeason(career, `${team.name} Playoffs (Season ${career.season})`);
     league.teams.forEach(t => {
         t.wins = 0; t.losses = 0; t.ties = 0; t.pf = 0; t.pa = 0; t.streak = 0;
-        // Stronger pull-to-average so dynasties can't compound for a decade straight
-        const pullToAvg = Math.round((76 - t.rating) * 0.18);
-        t.rating = clamp(t.rating + randInt(-4, 4) + pullToAvg, 55, 96);
+        // MLB ratings stay compact: a short random drift cannot compound into
+        // 130-win and 120-loss clubs over successive 162-game seasons.
+        if (career.sport === 'baseball') {
+            const pullToAvg = Math.round((74 - t.rating) * 0.32);
+            t.rating = clamp(t.rating + randInt(-2, 2) + pullToAvg, 62, 86);
+        } else {
+            // Stronger pull-to-average so dynasties can't compound for a decade straight
+            const pullToAvg = Math.round((76 - t.rating) * 0.18);
+            t.rating = clamp(t.rating + randInt(-4, 4) + pullToAvg, 55, 96);
+        }
     });
     league.schedule = buildSeasonSchedule(league.teams.map(t => t.id), LEAGUE_SHAPE[career.sport].games);
     league.week = 0; league.complete = false; league.playoffResult = null;
@@ -3116,7 +3355,10 @@ function requestTrade(career) {
     }
     /* Always update the timestamp so the next request has to wait again */
     career.trade.lastRequestGameCount = career.seasonGameCount;
-    const acceptChance = clamp(0.25 + (career.overall - 65) / 130, 0.15, 0.7);
+    const currentTeam = career.proLeague ? teamById(career.proLeague, career.team) : null;
+    const teamGames = currentTeam ? currentTeam.wins + currentTeam.losses + currentTeam.ties : 0;
+    const strugglingTeamBoost = teamGames >= 8 && winPct(currentTeam) < 0.4 ? 0.06 : 0;
+    const acceptChance = clamp(0.55 + (career.overall - 65) / 180 + strugglingTeamBoost, 0.45, 0.82);
     const accepted = Math.random() < acceptChance;
     if (accepted) {
         const league = career.proLeague;
@@ -3153,7 +3395,7 @@ function simulateTourEventForCareer(career) {
     const result = simulateTourEvent(career);
     event.played = true;
     event.result = result;
-    addStatTotals(career.seasonStats, {
+    const eventTotals = {
         eventsPlayed: 1,
         games: result.line.games || 0,
         pinfall: result.line.pinfall || 0,
@@ -3166,9 +3408,20 @@ function simulateTourEventForCareer(career) {
         titles: result.place === 1 ? 1 : 0,
         roundsPlayed: result.line.rounds || 0,
         strokesTotal: result.line.strokesTotal || 0,
+        eagles: result.line.eagles || 0,
+        birdies: result.line.birdies || 0,
+        pars: result.line.pars || 0,
+        bogeys: result.line.bogeys || 0,
+        doubleBogeys: result.line.doubleBogeys || 0,
+        fairwaysHit: result.line.fairwaysHit || 0,
+        fairwayChances: result.line.fairwayChances || 0,
+        greensInRegulation: result.line.greensInRegulation || 0,
+        putts: result.line.putts || 0,
         earnings: result.earnings,
         points: result.points,
-    });
+    };
+    addStatTotals(career.seasonStats, eventTotals);
+    updateCareerHighs(career, { ...eventTotals, highGame: result.line.highGame || 0 });
     if (career.sport === 'bowling' && result.line.highGame > (career.seasonStats.highGame || 0)) {
         career.seasonStats.highGame = result.line.highGame;
     }
@@ -3858,7 +4111,7 @@ function creatorFormHTML(sport) {
             ${Object.entries(CAREER_TIERS).map(([key, tier]) => `
               <button type="button" class="posChip ${cs.tier === key ? 'posChip--active' : ''}" data-action="creator-pick-tier" data-tier="${key}" style="min-width:0">
                 <span class="posChip__abbr" style="font-size:0.7rem">${escapeHtml(tier.label)}</span>
-                <span class="posChip__label" style="font-size:0.65rem;opacity:0.8">${escapeHtml(tier.desc)}</span>
+                <span class="posChip__label" style="font-size:0.65rem;opacity:0.8">${escapeHtml(tier.desc)} · ${tierOverallCap(sport, key)} OVR max</span>
               </button>`).join('')}
           </div>
         </section>
@@ -4328,7 +4581,7 @@ function renderAttributesTab(career) {
     const declineBanner = declining ? `<div class="declineBanner">
       <strong>Father Time has arrived.</strong> At age ${career.age}, skill points can no longer raise these attributes — Conditioning is the only thing still slowing the decline. Attributes will keep eroding each season until you retire (mandatory by age ${career.retirementAge}).
     </div>` : '';
-    const tierCap = TIER_OVERALL_CAPS[career.tier || DEFAULT_TIER] ?? 99;
+    const tierCap = tierOverallCap(career.sport, career.tier);
     const capNote = career.overall >= tierCap
         ? ` Your <strong>${CAREER_TIERS[career.tier || DEFAULT_TIER].label}</strong> career path caps your overall at <strong>${tierCap}</strong> — attributes are locked at their current ceiling.`
         : ` Your <strong>${CAREER_TIERS[career.tier || DEFAULT_TIER].label}</strong> path caps overall at <strong>${tierCap}</strong>.`;
@@ -4863,18 +5116,30 @@ function estimateSeasonStatline(sport, position, rating, games) {
     const p = clamp((rating - 40) / 55, 0, 1);
     const noise = () => randFloat(0.85, 1.15);
     if (sport === 'basketball') {
-        const ppg = clamp((6 + p * 24) * noise(), 2, 36);
-        const rpg = clamp((2 + p * 9) * noise(), 0.5, 15);
-        const apg = clamp((1 + p * 7) * noise(), 0.3, 11);
+        const isBig = ['PF', 'C'].includes(position);
+        const fga = Math.max(1, Math.round(clamp((8 + p * 10) * (isBig ? 0.92 : 1) * noise(), 6, 24) * games));
+        const fgPct = clamp((isBig ? 0.43 : 0.38) + p * 0.15, 0.34, isBig ? 0.64 : 0.58);
+        const fgm = Math.min(fga, Math.round(fga * fgPct));
+        const tpa = Math.min(fga, Math.round(clamp((2 + p * 6) * noise(), 0.5, isBig ? 8 : 12) * games));
+        const tp3PctBase = clamp(0.30 + p * 0.13, 0.24, 0.44);
+        const tpm = Math.min(fgm, tpa, Math.round(tpa * tp3PctBase));
+        const fta = Math.round(clamp((1 + p * 5) * noise(), 0.5, 8) * games);
+        const ftm = Math.min(fta, Math.round(fta * clamp(0.65 + p * 0.23, 0.55, 0.92)));
+        const pts = (fgm - tpm) * 2 + tpm * 3 + ftm;
+        const rpg = clamp((isBig ? 4 : 2) + p * (isBig ? 8 : 6), 0.5, 15) * noise();
+        const apg = clamp((position === 'PG' ? 3 : 1) + p * (position === 'PG' ? 7 : 4), 0.3, 11) * noise();
         const spg = clamp((0.4 + p * 1.6) * noise(), 0.1, 3);
-        const bpg = clamp((0.2 + p * 2.2) * noise(), 0, 3.5);
-        const tp3Pct = clamp(0.30 + p * 0.13, 0.24, 0.44);
-        const tpaPerGame = clamp(2 + p * 6, 0.5, 11);
+        const bpg = clamp((isBig ? 0.7 : 0.2) + p * (isBig ? 2.2 : 0.8), 0, 3.5) * noise();
+        const tovPerGame = clamp((position === 'PG' ? 1.3 : 0.7) + p * 2.1, 0.5, 5.5) * noise();
         return {
-            gp: games, pts: Math.round(ppg * games), reb: Math.round(rpg * games), ast: Math.round(apg * games),
+            gp: games, pts, reb: Math.round(rpg * games), ast: Math.round(apg * games),
             stl: Math.round(spg * games), blk: Math.round(bpg * games),
-            tpm: Math.round(tpaPerGame * tp3Pct * games), tpa: Math.round(tpaPerGame * games),
-            ppg, rpg, apg, spg, bpg, tp3Pct,
+            fgm, fga, tpm, tpa, ftm, fta, tov: Math.round(tovPerGame * games),
+            ppg: pts / games, rpg, apg, spg, bpg,
+            fgPct: fga ? fgm / fga : 0, tp3Pct: tpa ? tpm / tpa : 0,
+            ftPct: fta ? ftm / fta : 0,
+            efgPct: fga ? (fgm + 0.5 * tpm) / fga : 0,
+            tsPct: (fga + 0.44 * fta) ? pts / (2 * (fga + 0.44 * fta)) : 0,
         };
     }
     if (sport === 'football') {
@@ -4917,12 +5182,28 @@ function estimateSeasonStatline(sport, position, rating, games) {
         if (['SP', 'RP'].includes(position)) {
             const era = clamp(5.2 - p * 3.0, 1.8, 5.5);
             const ipFull = position === 'SP' ? clamp(120 + p * 90, 60, 220) : clamp(40 + p * 30, 20, 80);
-            return { gp: games, era: Math.round(era * 100) / 100, ip: Math.round(ipFull * seasonFrac) };
+            const k9 = clamp(5.0 + p * 5.0, 4, 12);
+            const bb9 = clamp(4.0 - p * 2.3, 1.0, 5);
+            const hr9 = clamp(1.8 - p * 1.1, 0.4, 2.0);
+            const ip = Math.round(ipFull * seasonFrac);
+            return { gp: games, era: Math.round(era * 100) / 100, ip, k9, bb9, hr9 };
         }
         const avg = clamp(0.220 + p * 0.10, 0.200, 0.340);
         const hrFull = clamp(Math.round((6 + p * 44) * noise()), 2, 65);
         const rbiFull = clamp(Math.round((30 + p * 90) * noise()), 15, 140);
-        return { gp: games, avg: Math.round(avg * 1000) / 1000, hr: Math.round(hrFull * seasonFrac), rbi: Math.round(rbiFull * seasonFrac) };
+        const ab = Math.round((500 + p * 100) * seasonFrac);
+        const hits = Math.round(avg * ab);
+        const walks = Math.round((35 + p * 35) * seasonFrac);
+        const hbp = Math.round((3 + p * 3) * seasonFrac);
+        const sf = Math.round((3 + p * 2) * seasonFrac);
+        const hr = Math.round(hrFull * seasonFrac);
+        const doubles = Math.round((20 + p * 20) * seasonFrac);
+        const triples = Math.round((1 + p * 3) * seasonFrac);
+        const tb = Math.max(hits, Math.min(ab * 4, hits + doubles + triples * 2 + hr * 3));
+        const obp = (hits + walks + hbp) / Math.max(1, ab + walks + hbp + sf);
+        const slg = tb / Math.max(1, ab);
+        return { gp: games, ab, avg: ab ? hits / ab : avg, obp, slg, ops: obp + slg,
+            hr, rbi: Math.round(rbiFull * seasonFrac) };
     }
     return { gp: games };
 }
@@ -4938,22 +5219,34 @@ function getLeagueLeaders(career) {
         const pool = [];
         league.teams.forEach(t => {
             (t.roster || []).forEach(pl => {
-                pool.push({ name: pl.name, teamName: t.name, isUser: false, ...estimateSeasonStatline(career.sport, pl.position, pl.rating, gamesSoFar) });
+                pool.push({ name: pl.name, teamName: t.name, isUser: false, gamesAvailable: gamesSoFar,
+                    ...estimateSeasonStatline(career.sport, pl.position, pl.rating, gamesSoFar) });
             });
         });
         league._leaderCache[cacheKey] = pool;
     }
     const pool = league._leaderCache[cacheKey].map(e => ({ ...e }));
-    const gp = career.seasonStats.gp || 1;
-    let userEntry = { name: career.name, teamName: teamById(league, career.team).name, isUser: true, gp };
+    const gp = career.seasonStats.gp || 0;
+    let userEntry = { name: career.name, teamName: teamById(league, career.team).name, isUser: true, gp, gamesAvailable: gamesSoFar };
     if (career.sport === 'basketball') {
+        const totals = career.seasonStats;
+        const boxScoreComplete = (totals.detailGp || 0) >= gp;
+        const fgm = totals.fgm || 0, fga = totals.fga || 0;
+        const tpm = totals.tpm || 0, tpa = totals.tpa || 0;
+        const ftm = totals.ftm || 0, fta = totals.fta || 0;
+        const pts = totals.pts || 0;
         userEntry = { ...userEntry,
-            pts: career.seasonStats.pts || 0, reb: career.seasonStats.reb || 0, ast: career.seasonStats.ast || 0,
-            stl: career.seasonStats.stl || 0, blk: career.seasonStats.blk || 0,
-            tpm: career.seasonStats.tpm || 0, tpa: career.seasonStats.tpa || 0,
-            ppg: (career.seasonStats.pts || 0) / gp, rpg: (career.seasonStats.reb || 0) / gp, apg: (career.seasonStats.ast || 0) / gp,
-            spg: (career.seasonStats.stl || 0) / gp, bpg: (career.seasonStats.blk || 0) / gp,
-            tp3Pct: career.seasonStats.tpa ? career.seasonStats.tpm / career.seasonStats.tpa : 0,
+            pts, reb: totals.reb || 0, ast: totals.ast || 0,
+            stl: totals.stl || 0, blk: totals.blk || 0,
+            fgm, fga, tpm, tpa, ftm, fta, tov: totals.tov || 0,
+            ppg: gp ? pts / gp : 0, rpg: gp ? (totals.reb || 0) / gp : 0,
+            apg: gp ? (totals.ast || 0) / gp : 0,
+            spg: gp ? (totals.stl || 0) / gp : 0, bpg: gp ? (totals.blk || 0) / gp : 0,
+            fgPct: fga ? fgm / fga : 0,
+            tp3Pct: tpa ? tpm / tpa : 0,
+            ftPct: boxScoreComplete && fta ? ftm / fta : undefined,
+            efgPct: fga ? (fgm + 0.5 * tpm) / fga : 0,
+            tsPct: boxScoreComplete && (fga + 0.44 * fta) ? pts / (2 * (fga + 0.44 * fta)) : undefined,
         };
     } else if (career.sport === 'football') {
         const group = posInfo('football', career.position).group;
@@ -4971,11 +5264,29 @@ function getLeagueLeaders(career) {
         };
     } else if (career.sport === 'baseball') {
         const isPitcher = statGroupFor('baseball', career.position) === 'pitcher';
+        const totals = career.seasonStats;
+        const boxScoreComplete = (totals.detailGp || 0) >= gp;
+        const ip = totals.ip || 0;
+        const ab = totals.ab || 0;
+        const hits = totals.h || 0;
+        const bb = totals.bb || 0;
+        const obp = boxScoreComplete
+            ? (hits + bb + (totals.hbp || 0)) / Math.max(1, ab + bb + (totals.hbp || 0) + (totals.sf || 0))
+            : undefined;
+        const slg = boxScoreComplete && ab ? (totals.tb || 0) / ab : undefined;
         userEntry = { ...userEntry, position: career.position,
-            era: isPitcher && career.seasonStats.ip ? (career.seasonStats.er * 9 / career.seasonStats.ip) : undefined,
-            ip: career.seasonStats.ip || 0,
-            avg: !isPitcher && career.seasonStats.ab ? career.seasonStats.h / career.seasonStats.ab : undefined,
-            hr: career.seasonStats.hr || 0, rbi: career.seasonStats.rbi || 0,
+            era: isPitcher && ip ? ((totals.er || 0) * 9 / ip) : undefined,
+            whip: isPitcher && ip ? ((bb + (totals.h || 0)) / ip) : undefined,
+            k9: isPitcher && ip ? ((totals.k || 0) * 9 / ip) : undefined,
+            bb9: isPitcher && ip ? (bb * 9 / ip) : undefined,
+            hr9: isPitcher && boxScoreComplete && ip ? ((totals.hrAllowed || 0) * 9 / ip) : undefined,
+            ip, ab,
+            avg: !isPitcher && ab ? hits / ab : undefined,
+            obp: !isPitcher ? obp : undefined,
+            slg: !isPitcher ? slg : undefined,
+            ops: !isPitcher && obp !== undefined && slg !== undefined ? obp + slg : undefined,
+            hr: !isPitcher ? (totals.hr || 0) : undefined,
+            rbi: !isPitcher ? (totals.rbi || 0) : undefined,
         };
     }
     pool.push(userEntry);
@@ -4984,7 +5295,12 @@ function getLeagueLeaders(career) {
 const LEADER_CATEGORIES = {
     basketball: [
         ['ppg', 'PPG', false], ['rpg', 'RPG', false], ['apg', 'APG', false], ['spg', 'SPG', false], ['bpg', 'BPG', false],
-        ['tp3Pct', '3P%', false], ['pts', 'Total PTS', false], ['reb', 'Total REB', false], ['ast', 'Total AST', false],
+        ['fgPct', 'FG%', false, e => e.gp >= Math.ceil((e.gamesAvailable || e.gp) * 0.7) && e.fga >= e.gp * 5],
+        ['tp3Pct', '3P%', false, e => e.gp >= Math.ceil((e.gamesAvailable || e.gp) * 0.7) && e.tpa >= e.gp * 3],
+        ['ftPct', 'FT%', false, e => e.gp >= Math.ceil((e.gamesAvailable || e.gp) * 0.7) && e.fta >= e.gp * 1.5],
+        ['efgPct', 'eFG%', false, e => e.gp >= Math.ceil((e.gamesAvailable || e.gp) * 0.7) && e.fga >= e.gp * 5],
+        ['tsPct', 'TS%', false, e => e.gp >= Math.ceil((e.gamesAvailable || e.gp) * 0.7) && e.fga >= e.gp * 5],
+        ['pts', 'Total PTS', false], ['reb', 'Total REB', false], ['ast', 'Total AST', false],
         ['stl', 'Total STL', false], ['blk', 'Total BLK', false], ['tpm', 'Total 3PM', false],
     ],
     football: [
@@ -5007,15 +5323,22 @@ const LEADER_CATEGORIES = {
         ['defTD', 'Defensive TDs', false, e => e.defTD !== undefined],
     ],
     baseball: [
-        ['avg', 'Batting Average', false, e => e.avg !== undefined],
+        ['avg', 'Batting Average', false, e => e.avg !== undefined && e.ab >= (e.gamesAvailable || 0) * 2.7],
+        ['obp', 'On-Base %', false, e => e.obp !== undefined && e.ab >= (e.gamesAvailable || 0) * 2.7],
+        ['slg', 'Slugging %', false, e => e.slg !== undefined && e.ab >= (e.gamesAvailable || 0) * 2.7],
+        ['ops', 'OPS', false, e => e.ops !== undefined && e.ab >= (e.gamesAvailable || 0) * 2.7],
         ['hr', 'Home Runs', false], ['rbi', 'RBI', false],
-        ['era', 'ERA', true, e => e.era !== undefined],
+        ['era', 'ERA', true, e => e.era !== undefined && e.ip >= (e.gamesAvailable || 0)],
+        ['whip', 'WHIP', true, e => e.whip !== undefined && e.ip >= (e.gamesAvailable || 0)],
+        ['k9', 'Strikeouts / 9', false, e => e.k9 !== undefined && e.ip >= 20],
+        ['bb9', 'Walks / 9', true, e => e.bb9 !== undefined && e.ip >= 20],
+        ['hr9', 'Home Runs / 9', true, e => e.hr9 !== undefined && e.ip >= 20],
     ],
 };
 function formatLeaderVal(key, val) {
-    if (key === 'tp3Pct' || key === 'compPct') return (val * 100).toFixed(1) + '%';
-    if (key === 'avg') return val.toFixed(3).replace(/^0/, '');
-    if (key === 'era') return val.toFixed(2);
+    if (['tp3Pct', 'fgPct', 'ftPct', 'efgPct', 'tsPct', 'compPct'].includes(key)) return (val * 100).toFixed(1) + '%';
+    if (['avg', 'obp', 'slg', 'ops'].includes(key)) return val.toFixed(3).replace(/^0/, '');
+    if (['era', 'whip', 'k9', 'bb9', 'hr9'].includes(key)) return val.toFixed(2);
     if (key === 'ypc' || key === 'ypr') return val.toFixed(1);
     if (typeof val === 'number' && !Number.isInteger(val)) return val.toFixed(1);
     return val;
@@ -5052,18 +5375,65 @@ function renderLeadersTab(career) {
    23. STATS TAB
    ---------------------------------------------------------------------- */
 function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
-function derivedColumns(sport, pos, totals) {
+function statsDetailsComplete(sport, pos, totals) {
+    if (sport === 'basketball' || sport === 'baseball') return (totals.detailGp || 0) >= (totals.gp || 0);
+    if (sport === 'golf') {
+        return ['eagles', 'birdies', 'pars', 'bogeys', 'doubleBogeys', 'fairwaysHit',
+            'fairwayChances', 'greensInRegulation', 'putts'].every(key => totals[key] !== undefined);
+    }
+    return true;
+}
+function detailedStatField(sport, pos, key) {
+    if (sport === 'basketball') return ['ftm', 'fta', 'tov', 'pf'].includes(key);
+    if (sport === 'baseball') {
+        return statGroupFor('baseball', pos) === 'pitcher'
+            ? key === 'hrAllowed'
+            : ['doubles', 'triples', 'tb', 'hbp', 'sf'].includes(key);
+    }
+    if (sport === 'golf') return ['eagles', 'birdies', 'pars', 'bogeys', 'doubleBogeys',
+        'fairwaysHit', 'fairwayChances', 'greensInRegulation', 'putts'].includes(key);
+    return false;
+}
+function derivedColumns(sport, pos, totals, detailComplete = true) {
     if (sport === 'basketball') {
         const gp = totals.gp || 0;
-        return gp ? [['PPG', (totals.pts / gp).toFixed(1)], ['RPG', (totals.reb / gp).toFixed(1)], ['APG', (totals.ast / gp).toFixed(1)], ['SPG', (totals.stl / gp).toFixed(1)], ['BPG', (totals.blk / gp).toFixed(1)], ['FG%', (totals.fga ? (totals.fgm / totals.fga * 100).toFixed(1) : '0.0') + '%'], ['3P%', (totals.tpa ? (totals.tpm / totals.tpa * 100).toFixed(1) : '0.0') + '%']] : [];
+        if (!gp) return [];
+        const fga = totals.fga || 0, fgm = totals.fgm || 0;
+        const tpa = totals.tpa || 0, tpm = totals.tpm || 0;
+        const fta = totals.fta || 0, ftm = totals.ftm || 0;
+        const fgPct = fga ? (fgm / fga * 100).toFixed(1) + '%' : '—';
+        const threePct = tpa ? (tpm / tpa * 100).toFixed(1) + '%' : '—';
+        const efgPct = fga ? ((fgm + 0.5 * tpm) / fga * 100).toFixed(1) + '%' : '—';
+        const ftPct = detailComplete && fta ? (ftm / fta * 100).toFixed(1) + '%' : '—';
+        const tsPct = detailComplete && (fga + 0.44 * fta)
+            ? (totals.pts / (2 * (fga + 0.44 * fta)) * 100).toFixed(1) + '%' : '—';
+        const astTo = detailComplete && totals.tov ? (totals.ast / totals.tov).toFixed(2) : '—';
+        return [
+            ['PPG', (totals.pts / gp).toFixed(1)], ['RPG', (totals.reb / gp).toFixed(1)],
+            ['APG', (totals.ast / gp).toFixed(1)], ['SPG', (totals.stl / gp).toFixed(1)],
+            ['BPG', (totals.blk / gp).toFixed(1)], ['FG%', fgPct], ['3P%', threePct],
+            ['eFG%', efgPct], ['FT%', ftPct], ['TS%', tsPct], ['AST/TO', astTo],
+        ];
     }
     if (sport === 'baseball') {
         if (statGroupFor('baseball', pos) === 'pitcher') {
             const ip = totals.ip || 0;
-            return [['ERA', ip ? (totals.er * 9 / ip).toFixed(2) : '0.00'], ['WHIP', ip ? ((totals.bb + totals.h) / ip).toFixed(2) : '0.00']];
+            return [
+                ['ERA', ip ? ((totals.er || 0) * 9 / ip).toFixed(2) : '0.00'],
+                ['WHIP', ip ? (((totals.bb || 0) + (totals.h || 0)) / ip).toFixed(2) : '0.00'],
+                ['K/9', ip ? ((totals.k || 0) * 9 / ip).toFixed(2) : '0.00'],
+                ['BB/9', ip ? ((totals.bb || 0) * 9 / ip).toFixed(2) : '0.00'],
+                ['HR/9', detailComplete && ip ? ((totals.hrAllowed || 0) * 9 / ip).toFixed(2) : '—'],
+            ];
         }
         const ab = totals.ab || 0;
-        return [['AVG', ab ? (totals.h / ab).toFixed(3).replace(/^0/, '') : '.000']];
+        const avg = ab ? ((totals.h || 0) / ab).toFixed(3).replace(/^0/, '') : '.000';
+        if (!detailComplete) return [['AVG', avg], ['OBP', '—'], ['SLG', '—'], ['OPS', '—']];
+        const obp = (totals.h + (totals.bb || 0) + (totals.hbp || 0))
+            / Math.max(1, ab + (totals.bb || 0) + (totals.hbp || 0) + (totals.sf || 0));
+        const slg = ab ? (totals.tb || 0) / ab : 0;
+        return [['AVG', avg], ['OBP', obp.toFixed(3).replace(/^0/, '')],
+            ['SLG', slg.toFixed(3).replace(/^0/, '')], ['OPS', (obp + slg).toFixed(3).replace(/^0/, '')]];
     }
     if (sport === 'bowling') {
         const g = totals.games || 0;
@@ -5071,11 +5441,19 @@ function derivedColumns(sport, pos, totals) {
     }
     if (sport === 'golf') {
         const rds = totals.roundsPlayed || 0;
-        return [['SCORING AVG', rds ? (totals.strokesTotal / rds).toFixed(2) : '0.00']];
+        const detail = detailComplete && rds;
+        return [
+            ['SCORING AVG', rds ? (totals.strokesTotal / rds).toFixed(2) : '0.00'],
+            ['BIRDIES / RD', detail ? (totals.birdies / rds).toFixed(2) : '—'],
+            ['FIR%', detail && totals.fairwayChances ? (totals.fairwaysHit / totals.fairwayChances * 100).toFixed(1) + '%' : '—'],
+            ['GIR%', detail ? (totals.greensInRegulation / (rds * 18) * 100).toFixed(1) + '%' : '—'],
+            ['PUTTS / RD', detail ? (totals.putts / rds).toFixed(2) : '—'],
+        ];
     }
     return [];
 }
 function formatStatVal(key, val) {
+    if (val === undefined || val === null) return '—';
     if (key === 'earnings') return fmtMoney(val);
     if (key === 'ip') return formatIP(val);
     if (typeof val === 'number' && !Number.isInteger(val)) return val.toFixed(1);
@@ -5086,17 +5464,40 @@ const STAT_AGGREGATE_MAX = { highGame: true };
 
 
 
-function careerHighsHTML(fields, highsObj, sectionTitle) {
+function careerHighsHTML(fields, highsObj, sectionTitle, sport) {
     if (!highsObj || !Object.keys(highsObj).length) return '';
     const lowerIsBetter = new Set(['strokesTotal', 'relToPar']);
-    const rows = fields
+    const records = fields
         .filter(([k]) => highsObj[k] !== undefined && k !== 'gp')
-        .map(([k, label]) => {
-            const note = lowerIsBetter.has(k) ? ' (lowest)' : '';
+        .map(([key, label]) => ({ key, label, value: formatStatVal(key, highsObj[key]) }));
+    if (sport === 'basketball') {
+        const featuredKeys = ['pts', 'reb', 'ast', 'stl', 'blk'];
+        const featured = featuredKeys.map(key => records.find(record => record.key === key)).filter(Boolean);
+        const secondary = records.filter(record => !featuredKeys.includes(record.key));
+        const card = (record, isFeatured) => `<div class="careerHighs__card${isFeatured ? ' careerHighs__card--featured' : ''}" data-stat="${escapeHtml(record.key)}">
+        <span class="careerHighs__label">${escapeHtml(record.label)}</span>
+        <strong class="careerHighs__value">${escapeHtml(String(record.value))}</strong>
+        <span class="careerHighs__caption">single-game high</span>
+      </div>`;
+        return `<section class="block careerHighs careerHighs--basketball">
+        <div class="careerHighs__heading">
+          <h2 class="block__title">${escapeHtml(sectionTitle)} Career Highs</h2>
+          <span class="careerHighs__eyebrow">BEST GAME · NOT SEASON AVERAGE</span>
+        </div>
+        <div class="careerHighs__grid careerHighs__grid--featured">${featured.map(record => card(record, true)).join('')}</div>
+        ${secondary.length ? `<div class="careerHighs__secondary">
+          <h3>Other single-game highs</h3>
+          <div class="careerHighs__grid">${secondary.map(record => card(record, false)).join('')}</div>
+        </div>` : ''}
+      </section>`;
+    }
+    const rows = records
+        .map(({ key, label, value }) => {
+            const note = lowerIsBetter.has(key) ? ' (lowest)' : '';
             return `<div class="gameLogRow">
         <div class="gameLogRow__main">
-          <span class="gameLogRow__label">${label}${note}</span>
-          <span class="gameLogRow__summary">${formatStatVal(k, highsObj[k])}</span>
+          <span class="gameLogRow__label">${escapeHtml(label)}${note}</span>
+          <span class="gameLogRow__summary">${escapeHtml(String(value))}</span>
         </div>
       </div>`;
         }).join('');
@@ -5109,28 +5510,39 @@ function careerHighsHTML(fields, highsObj, sectionTitle) {
 
 function statsSectionHTML(sport, pos, fields, rows, sectionTitle, highsObj) {
     const careerTotals = {};
+    const unknownCareerFields = new Set();
     fields.forEach(([k]) => careerTotals[k] = 0);
     rows.forEach(rw => fields.forEach(([k]) => {
-        if (STAT_AGGREGATE_MAX[k]) careerTotals[k] = Math.max(careerTotals[k] || 0, rw.totals[k] || 0);
-        else careerTotals[k] += (rw.totals[k] || 0);
+        const rowDetailComplete = statsDetailsComplete(sport, pos, rw.totals);
+        if (rw.totals[k] === undefined || rw.totals[k] === null ||
+            (detailedStatField(sport, pos, k) && !rowDetailComplete)) {
+            unknownCareerFields.add(k);
+            return;
+        }
+        if (STAT_AGGREGATE_MAX[k]) careerTotals[k] = Math.max(careerTotals[k] || 0, rw.totals[k]);
+        else careerTotals[k] += rw.totals[k];
     }));
+    unknownCareerFields.forEach(k => { careerTotals[k] = undefined; });
+    const careerDetailComplete = rows.every(rw => statsDetailsComplete(sport, pos, rw.totals));
 
     const derivedHeaders = derivedColumns(sport, pos, careerTotals).map(([l]) => l);
 
     function tableRowHTML(rw) {
-        const derived = derivedColumns(sport, pos, rw.totals);
+        const rowDetailComplete = statsDetailsComplete(sport, pos, rw.totals);
+        const derived = derivedColumns(sport, pos, rw.totals, rowDetailComplete);
         return `<tr class="${rw.current ? 'statsTable__current' : ''}">
       <td class="statsTable__label">${escapeHtml(rw.label)}</td>
       ${derived.map(([, v]) => `<td class="statsTable__headline">${v}</td>`).join('')}
-      ${fields.map(([k]) => `<td>${formatStatVal(k, rw.totals[k] || 0)}</td>`).join('')}
+      ${fields.map(([k]) => `<td>${formatStatVal(k, detailedStatField(sport, pos, k) && !rowDetailComplete ? undefined : rw.totals[k])}</td>`).join('')}
     </tr>`;
     }
+    const derivedCareer = derivedColumns(sport, pos, careerTotals, careerDetailComplete);
 
     const table = rows.length ? `<div class="tableScroll"><table class="statsTable">
     <thead><tr><th>Season</th>${derivedHeaders.map(l => `<th class="statsTable__headline">${l}</th>`).join('')}${fields.map(([, l]) => `<th>${l}</th>`).join('')}</tr></thead>
     <tbody>
       ${rows.map(tableRowHTML).join('')}
-      <tr class="statsTable__totals"><td>${escapeHtml(sectionTitle)} Totals</td>${derivedColumns(sport, pos, careerTotals).map(([, v]) => `<td>${v}</td>`).join('')}${fields.map(([k]) => `<td>${formatStatVal(k, careerTotals[k])}</td>`).join('')}</tr>
+      <tr class="statsTable__totals"><td>${escapeHtml(sectionTitle)} Totals</td>${derivedCareer.map(([, v]) => `<td>${v}</td>`).join('')}${fields.map(([k]) => `<td>${formatStatVal(k, careerTotals[k])}</td>`).join('')}</tr>
     </tbody>
   </table></div>` : `<p class="emptyHint">No ${sectionTitle.toLowerCase()} games played yet.</p>`;
 
@@ -5139,7 +5551,7 @@ function statsSectionHTML(sport, pos, fields, rows, sectionTitle, highsObj) {
       <h2 class="block__title">${escapeHtml(sectionTitle)} Stat Log</h2>
       ${table}
     </section>
-    ${careerHighsHTML(fields, highsObj, sectionTitle)}
+    ${careerHighsHTML(fields, highsObj, sectionTitle, sport)}
   `;
 }
 
