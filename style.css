@@ -707,3 +707,201 @@ input[type="range"]::-moz-range-thumb {
 button, [data-action] {
     touch-action: manipulation;
 }
+
+/* ---------------------------------------------------------------------
+   18. OPTIONAL TEXTURED FINISH
+   Remove "textureMode" from the <body> class to restore the original flat
+   surfaces. This adds a low-contrast brushed-paper grain without changing
+   layout, component behavior, or the sport accent colors.
+   --------------------------------------------------------------------- */
+body.textureMode {
+    background-color: var(--bg-base);
+    background-image:
+        radial-gradient(ellipse at 50% 0%, rgba(232, 179, 61, .045), transparent 48%),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, .012) 0 1px, transparent 1px 4px),
+        repeating-linear-gradient(90deg, rgba(0, 0, 0, .025) 0 1px, transparent 1px 5px);
+    background-attachment: fixed;
+}
+body.textureMode .page {
+    background-image:
+        radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, .025), transparent 55%),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, .009) 0 1px, transparent 1px 5px);
+}
+body.textureMode .sportTile,
+body.textureMode .careerCard,
+body.textureMode .gameLogRow,
+body.textureMode .actionCard,
+body.textureMode .offerCard {
+    background-image:
+        linear-gradient(145deg, rgba(255, 255, 255, .025), transparent 58%),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, .012) 0 1px, transparent 1px 5px);
+}
+@media (prefers-reduced-transparency: reduce) {
+    body.textureMode .sportTile,
+    body.textureMode .careerCard,
+    body.textureMode .gameLogRow,
+    body.textureMode .actionCard,
+    body.textureMode .offerCard {
+        background-image: linear-gradient(145deg, rgba(255, 255, 255, .02), transparent 58%);
+    }
+}
+
+/* Distinct material treatments for the components they belong to:
+   jersey knit for sport choices, brushed alloy for profile cards, and
+   scorebook ruling for stat-heavy surfaces. */
+body.textureMode .page {
+    background-image:
+        radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, .028), transparent 52%),
+        repeating-linear-gradient(135deg, rgba(255, 255, 255, .009) 0 1px, transparent 1px 9px),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, .006) 0 1px, transparent 1px 7px);
+}
+body.textureMode .sportTile,
+body.textureMode .sportTile:hover {
+    background-image:
+        linear-gradient(115deg, rgba(255, 255, 255, .045), transparent 42%, rgba(0, 0, 0, .11)),
+        repeating-linear-gradient(35deg, rgba(255, 255, 255, .025) 0 1px, transparent 1px 5px),
+        repeating-linear-gradient(125deg, rgba(0, 0, 0, .08) 0 1px, transparent 1px 7px);
+    box-shadow: inset 0 1px rgba(255, 255, 255, .055), inset 0 -1px rgba(0, 0, 0, .24);
+}
+body.textureMode .careerCard,
+body.textureMode .careerCard:hover {
+    background-image:
+        linear-gradient(105deg, rgba(255, 255, 255, .035), transparent 35%, rgba(255, 255, 255, .012) 62%, rgba(0, 0, 0, .16)),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, .018) 0 1px, transparent 1px 3px);
+    box-shadow: inset 0 1px rgba(255, 255, 255, .045), 0 7px 18px rgba(0, 0, 0, .12);
+}
+body.textureMode .gameLogRow {
+    background-image:
+        linear-gradient(90deg, rgba(232, 179, 61, .035) 0 3px, transparent 3px),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, .012) 0 1px, transparent 1px 6px);
+}
+body.textureMode .actionCard,
+body.textureMode .offerCard,
+body.textureMode .modalCard {
+    background-image:
+        linear-gradient(145deg, rgba(255, 255, 255, .035), transparent 60%),
+        repeating-linear-gradient(45deg, rgba(255, 255, 255, .008) 0 1px, transparent 1px 8px);
+}
+body.textureMode .statsTable,
+body.textureMode .standingsTable {
+    background-color: rgba(8, 11, 15, .18);
+    background-image:
+        repeating-linear-gradient(0deg, transparent 0 31px, rgba(255, 255, 255, .025) 31px 32px),
+        repeating-linear-gradient(90deg, transparent 0 67px, rgba(255, 255, 255, .014) 67px 68px);
+}
+body.textureMode .statsTable th,
+body.textureMode .standingsTable th {
+    background-image:
+        linear-gradient(180deg, rgba(255, 255, 255, .045), rgba(255, 255, 255, .006)),
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, .014) 0 1px, transparent 1px 5px);
+}
+body.textureMode .statsTable__totals td {
+    background-image:
+        linear-gradient(110deg, rgba(232, 179, 61, .12), rgba(232, 179, 61, .025)),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, .018) 0 1px, transparent 1px 4px);
+}
+body.textureMode .standingsTable__me {
+    background-image:
+        linear-gradient(90deg, var(--accent-soft), rgba(255, 255, 255, .018)),
+        repeating-linear-gradient(135deg, rgba(255, 255, 255, .025) 0 1px, transparent 1px 7px);
+}
+body.textureMode .btn--primary {
+    background-image:
+        linear-gradient(110deg, rgba(255, 255, 255, .16), transparent 45%, rgba(104, 65, 8, .12)),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, .035) 0 1px, transparent 1px 4px);
+    box-shadow: inset 0 1px rgba(255, 255, 255, .26), 0 3px 10px rgba(0, 0, 0, .2);
+}
+body.textureMode .attrRow,
+body.textureMode .ovrBanner {
+    background-image:
+        linear-gradient(135deg, rgba(255, 255, 255, .035), transparent 56%),
+        repeating-linear-gradient(135deg, rgba(255, 255, 255, .012) 0 1px, transparent 1px 6px);
+}
+
+.careerHighs__heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 5px 10px;
+    margin-bottom: 10px;
+}
+.careerHighs__eyebrow {
+    color: var(--gold);
+    font: 700 9px/1.2 var(--font-mono);
+    letter-spacing: .09em;
+}
+.careerHighs__grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+.careerHighs__card {
+    display: flex;
+    min-width: 0;
+    min-height: 78px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    padding: 9px 10px;
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+    border-radius: 11px;
+    background:
+        linear-gradient(145deg, rgba(255, 255, 255, .035), transparent 55%),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, .012) 0 1px, transparent 1px 5px),
+        var(--bg-surface);
+}
+.careerHighs__card--featured {
+    border-color: rgba(232, 179, 61, .34);
+    background:
+        radial-gradient(ellipse at 50% 0%, rgba(232, 179, 61, .13), transparent 75%),
+        repeating-linear-gradient(135deg, rgba(255, 255, 255, .018) 0 1px, transparent 1px 7px),
+        linear-gradient(155deg, #20232a, #15191f);
+    box-shadow: inset 0 1px rgba(255, 255, 255, .07), 0 5px 14px rgba(0, 0, 0, .16);
+}
+.careerHighs__label {
+    overflow: hidden;
+    color: var(--text-secondary);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+.careerHighs__value {
+    color: var(--text-primary);
+    font: 700 24px/1.05 var(--font-mono);
+    font-variant-numeric: tabular-nums;
+}
+.careerHighs__card--featured .careerHighs__value {
+    color: #F4CB71;
+    text-shadow: 0 1px rgba(0, 0, 0, .5);
+}
+.careerHighs__caption {
+    color: var(--text-faint);
+    font-size: 9px;
+    line-height: 1.2;
+}
+.careerHighs__secondary {
+    margin-top: 13px;
+}
+.careerHighs__secondary h3 {
+    margin-bottom: 8px;
+    color: var(--text-muted);
+    font: 600 11px/1.3 var(--font-body);
+    letter-spacing: .05em;
+    text-transform: uppercase;
+}
+@media (min-width: 420px) {
+    .careerHighs__grid--featured {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+}
+@media (max-width: 360px) {
+    .careerHighs__grid { gap: 6px; }
+    .careerHighs__card { min-height: 70px; padding: 8px 7px; }
+    .careerHighs__value { font-size: 21px; }
+    .careerHighs__label { font-size: 9px; }
+}
